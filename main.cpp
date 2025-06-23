@@ -4,7 +4,7 @@
 
 int main() {
     // Uncomment the following line to run the benchmark
-    benchmark();
+    // benchmark();
     
     std::cout << "Starting a new game..." << std::endl;
     Game g;

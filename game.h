@@ -9,6 +9,10 @@ private:
     Board board;
     ChessAI ai;
     Color humanColor = WHITE;
+    
+    // Helper methods for improved error handling
+    void clearInputStream();
+    bool parseMove(const std::string& input, std::string& from, std::string& to, std::string& promotion);
 
 public:
     void play();
