@@ -73,13 +73,6 @@ Optimize Search: Add transposition tables or iterative deepening to ChessAI::min
 Add Features: Implement puzzle evaluation, time controls, or a graphical interface.
 Test Suites: Integrate standard test suites (e.g., Bratko-Kopec, WAC) for tactical accuracy.
 
-Limitations
-
-Performance: The AI may be slow at higher depths due to basic optimization (no transposition tables).
-Evaluation: The evaluation function is simple, focusing on material and basic positional factors.
-Interface: Text-based, requiring manual input in algebraic notation.
-Depth: Fixed-depth search (default depth 3) limits strategic play.
-
 Contributing
 Contributions are welcome! Please:
 
