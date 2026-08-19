@@ -5,7 +5,8 @@ A simple command-line chess AI implemented in C++ using the minimax algorithm wi
 ## Features
 
 - **Playable Chess Game**: Play against the AI in a text-based interface.
-- **Minimax with Alpha-Beta Pruning**: The AI uses a depth-limited minimax algorithm with alpha-beta pruning for move selection.
+- **Negamax with Alpha-Beta Pruning**: Uses a state-of-the-art Negamax formulation with Alpha-Beta pruning for move selection.
+- **Iterative Deepening**: Searches progressively deeper (depth 1, then 2, then 3...) to ensure the best moves are found early, drastically improving pruning.
 - **Board Evaluation**: Evaluates positions based on material, piece-square tables, mobility, and pawn structure.
 - **Move Generation**: Supports all legal chess moves, including castling, en passant, and promotions.
 - **Transposition Table (TT)**: Uses Zobrist Hashing to cache previously evaluated positions and prune redundant search branches.

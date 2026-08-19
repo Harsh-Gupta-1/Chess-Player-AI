@@ -18,7 +18,7 @@ public:
     Move getBestMove(Board& board, Color aiColor, int depth);
 
 private:
-    int minimax(Board& board, int depth, int alpha, int beta, Color currentTurn, bool maximizing);
+    int negamax(Board& board, int depth, int alpha, int beta, Color currentTurn);
 };
 
 #endif // CHESS_AI_H

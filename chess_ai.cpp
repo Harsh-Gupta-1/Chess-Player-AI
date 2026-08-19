@@ -2,35 +2,48 @@
 #include <iostream>
 #include <algorithm>
 
-Move ChessAI::getBestMove(Board& board, Color aiColor, int depth) {
+Move ChessAI::getBestMove(Board& board, Color aiColor, int maxDepth) {
     tt.clear();
     nodesExplored = 0;
-    int bestScore = (aiColor == WHITE) ? std::numeric_limits<int>::min() : std::numeric_limits<int>::max();
     Move bestMove(0, 0, 0, 0);
-    
-    std::vector<Move> legalMoves = board.generateLegalMoves(aiColor);
-    if (legalMoves.empty()) return bestMove;
 
-    for (const auto& move : legalMoves) {
-        GameState prevState = board.gameState;
-        Piece captured = board.getPiece(move.toX, move.toY);
-        board.makeMove(move);
+    for (int depth = 1; depth <= maxDepth; depth++) {
+        int alpha = std::numeric_limits<int>::min() + 1;
+        int beta = std::numeric_limits<int>::max() - 1;
+        int bestScore = std::numeric_limits<int>::min() + 1;
         
-        int score = minimax(board, depth - 1, std::numeric_limits<int>::min(), 
-                           std::numeric_limits<int>::max(), aiColor == WHITE ? BLACK : WHITE, aiColor == BLACK);
+        std::vector<Move> legalMoves = board.generateLegalMoves(aiColor);
+        if (legalMoves.empty()) break;
         
-        board.undoMove(move, captured, prevState);
+        // Very basic move ordering for ID: try TT move first if available
+        // In Phase 4 we will fully implement move ordering
+        Move currentBestMove(0,0,0,0);
 
-        if ((aiColor == WHITE && score > bestScore) || (aiColor == BLACK && score < bestScore)) {
-            bestScore = score;
-            bestMove = move;
+        for (const auto& move : legalMoves) {
+            GameState prevState = board.gameState;
+            Piece captured = board.getPiece(move.toX, move.toY);
+            board.makeMove(move);
+            
+            int score = -negamax(board, depth - 1, -beta, -alpha, aiColor == WHITE ? BLACK : WHITE);
+            
+            board.undoMove(move, captured, prevState);
+
+            if (score > bestScore) {
+                bestScore = score;
+                currentBestMove = move;
+            }
+            alpha = std::max(alpha, score);
         }
+        
+        bestMove = currentBestMove;
+        // Check time management here later (Phase 4)
     }
+    
     std::cout << "Nodes explored: " << nodesExplored << std::endl;
     return bestMove;
 }
 
-int ChessAI::minimax(Board& board, int depth, int alpha, int beta, Color currentTurn, bool maximizing) {
+int ChessAI::negamax(Board& board, int depth, int alpha, int beta, Color currentTurn) {
     nodesExplored++;
     
     int originalAlpha = alpha;
@@ -42,10 +55,13 @@ int ChessAI::minimax(Board& board, int depth, int alpha, int beta, Color current
         return ttScore;
     }
     
-    if (depth == 0) return board.evaluate();
+    if (depth == 0) {
+        int eval = board.evaluate();
+        return (currentTurn == WHITE) ? eval : -eval;
+    }
     
     if (board.isCheckmate(currentTurn)) {
-        return maximizing ? -10000 : 10000;
+        return -10000;
     }
     
     if (board.isStalemate(currentTurn) || board.isDraw()) {
@@ -53,57 +69,33 @@ int ChessAI::minimax(Board& board, int depth, int alpha, int beta, Color current
     }
 
     std::vector<Move> moves = board.generateLegalMoves(currentTurn);
+    if (moves.empty()) return -10000;
     
-    if (maximizing) {
-        Move bestMoveForTT(0,0,0,0);
-        int maxEval = std::numeric_limits<int>::min();
-        for (const auto& move : moves) {
-            GameState prevState = board.gameState;
-            Piece captured = board.getPiece(move.toX, move.toY);
-            board.makeMove(move);
-            
-            int eval = minimax(board, depth - 1, alpha, beta, 
-                             currentTurn == WHITE ? BLACK : WHITE, false);
-            
-            board.undoMove(move, captured, prevState);
-            
-            maxEval = std::max(maxEval, eval);
-            alpha = std::max(alpha, eval);
-            if (alpha > originalAlpha) bestMoveForTT = move;
-            if (beta <= alpha) break;
+    int maxEval = std::numeric_limits<int>::min() + 1;
+    Move bestMoveForTT(0,0,0,0);
+    
+    for (const auto& move : moves) {
+        GameState prevState = board.gameState;
+        Piece captured = board.getPiece(move.toX, move.toY);
+        board.makeMove(move);
+        
+        int eval = -negamax(board, depth - 1, -beta, -alpha, currentTurn == WHITE ? BLACK : WHITE);
+        
+        board.undoMove(move, captured, prevState);
+        
+        if (eval > maxEval) {
+            maxEval = eval;
+            bestMoveForTT = move;
         }
-        
-        Bound bound = EXACT;
-        if (maxEval <= originalAlpha) bound = UPPER_BOUND;
-        else if (maxEval >= beta) bound = LOWER_BOUND;
-        tt.store(hashKey, depth, maxEval, bound, bestMoveForTT);
-        
-        return maxEval;
-    } else {
-        Move bestMoveForTT(0,0,0,0);
-        int originalBeta = beta;
-        int minEval = std::numeric_limits<int>::max();
-        for (const auto& move : moves) {
-            GameState prevState = board.gameState;
-            Piece captured = board.getPiece(move.toX, move.toY);
-            board.makeMove(move);
-            
-            int eval = minimax(board, depth - 1, alpha, beta, 
-                             currentTurn == WHITE ? BLACK : WHITE, true);
-            
-            board.undoMove(move, captured, prevState);
-            
-            minEval = std::min(minEval, eval);
-            beta = std::min(beta, eval);
-            if (beta < originalBeta) bestMoveForTT = move;
-            if (beta <= alpha) break;
-        }
-        
-        Bound bound = EXACT;
-        if (minEval <= alpha) bound = UPPER_BOUND;
-        else if (minEval >= originalBeta) bound = LOWER_BOUND;
-        tt.store(hashKey, depth, minEval, bound, bestMoveForTT);
-        
-        return minEval;
+        alpha = std::max(alpha, eval);
+        if (alpha >= beta) break;
     }
+    
+    Bound bound = EXACT;
+    if (maxEval <= originalAlpha) bound = UPPER_BOUND;
+    else if (maxEval >= beta) bound = LOWER_BOUND;
+    
+    tt.store(hashKey, depth, maxEval, bound, bestMoveForTT);
+    
+    return maxEval;
 }
