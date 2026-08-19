@@ -32,10 +32,13 @@ struct GameState {
     int enPassantX, enPassantY;
     bool hasEnPassant;
     unsigned long long zobristKey;
+    int halfmoveClock;
+    int fullmoveNumber;
     
     GameState() : whiteCanCastleKingside(true), whiteCanCastleQueenside(true),
                   blackCanCastleKingside(true), blackCanCastleQueenside(true),
-                  enPassantX(-1), enPassantY(-1), hasEnPassant(false), zobristKey(0) {}
+                  enPassantX(-1), enPassantY(-1), hasEnPassant(false), zobristKey(0),
+                  halfmoveClock(0), fullmoveNumber(1) {}
 };
 
 #endif // PIECE_H

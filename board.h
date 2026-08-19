@@ -34,6 +34,8 @@ public:
 
     Board();
     bool isRepetition() const;
+    bool isInsufficientMaterial();
+    bool isDraw();
     void setupBoard();
     Color loadFEN(const std::string& fen);
     void printBoard();
@@ -55,7 +57,6 @@ public:
     std::vector<Move> generateLegalMoves(Color color);
     bool isCheckmate(Color color);
     bool isStalemate(Color color);
-    bool isDraw();
     int evaluate();
 };
 

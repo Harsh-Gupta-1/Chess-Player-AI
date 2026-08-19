@@ -251,6 +251,30 @@ Color Board::loadFEN(const std::string& fen) {
         gameState.enPassantY = fileChar - 'a';
         gameState.enPassantX = rankChar - '1';
         gameState.hasEnPassant = true;
+    } else {
+        if (i < fen.length()) i++;
+    }
+    
+    while (i < fen.length() && fen[i] == ' ') i++;
+    
+    gameState.halfmoveClock = 0;
+    if (i < fen.length()) {
+        std::string halfmoveStr = "";
+        while (i < fen.length() && fen[i] != ' ') {
+            halfmoveStr += fen[i++];
+        }
+        if (!halfmoveStr.empty()) gameState.halfmoveClock = std::stoi(halfmoveStr);
+    }
+    
+    while (i < fen.length() && fen[i] == ' ') i++;
+    
+    gameState.fullmoveNumber = 1;
+    if (i < fen.length()) {
+        std::string fullmoveStr = "";
+        while (i < fen.length() && fen[i] != ' ') {
+            fullmoveStr += fen[i++];
+        }
+        if (!fullmoveStr.empty()) gameState.fullmoveNumber = std::stoi(fullmoveStr);
     }
     
     gameState.zobristKey = Zobrist::computeHash(*this, activeColor);
@@ -365,6 +389,16 @@ void Board::makeMove(const Move& m) {
         history[historyPly++] = gameState.zobristKey;
     }
     Piece movingPiece = board[m.fromX][m.fromY];
+    
+    if (movingPiece.type == PAWN || board[m.toX][m.toY].type != EMPTY) {
+        gameState.halfmoveClock = 0;
+    } else {
+        gameState.halfmoveClock++;
+    }
+    
+    if (movingPiece.color == BLACK) {
+        gameState.fullmoveNumber++;
+    }
     
     int oldCastle = 0;
     if (gameState.whiteCanCastleKingside) oldCastle |= 1;
@@ -708,9 +742,10 @@ bool Board::isStalemate(Color color) {
 
 bool Board::isRepetition() const {
     if (historyPly < 4) return false;
+    int limit = std::max(0, historyPly - gameState.halfmoveClock);
     int repetitions = 0;
     // We only need to check every 2 plies (same side to move)
-    for (int i = historyPly - 4; i >= 0; i -= 2) {
+    for (int i = historyPly - 4; i >= limit; i -= 2) {
         if (history[i] == gameState.zobristKey) {
             repetitions++;
             if (repetitions >= 1) return true; // 2-fold repetition is enough to score a draw in search
@@ -719,7 +754,7 @@ bool Board::isRepetition() const {
     return false;
 }
 
-bool Board::isDraw() {
+bool Board::isInsufficientMaterial() {
     std::vector<PieceType> whitePieces, blackPieces;
     for (int x = 0; x < 8; x++) {
         for (int y = 0; y < 8; y++) {
@@ -743,6 +778,11 @@ bool Board::isDraw() {
     }
     
     return false;
+}
+
+bool Board::isDraw() {
+    if (gameState.halfmoveClock >= 100) return true;
+    return isInsufficientMaterial();
 }
 
 int Board::evaluateMobility() {

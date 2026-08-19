@@ -129,12 +129,16 @@ int ChessAI::negamax(Board& board, int depth, int ply, int alpha, int beta, Colo
     int ttScore;
     Move ttMove(0,0,0,0);
     
+    if (ply > 0 && board.isRepetition()) {
+        return 0;
+    }
+    if (board.isDraw()) {
+        return 0;
+    }
+    
     if (tt.probe(hashKey, depth, ply, alpha, beta, ttScore, ttMove)) {
         stats.ttHits++;
         return ttScore;
-    }
-    if (ply > 0 && board.isRepetition()) {
-        return 0;
     }
     
     // Cap maximum search depth to prevent stack overflow from runaway check extensions
@@ -169,10 +173,6 @@ int ChessAI::negamax(Board& board, int depth, int ply, int alpha, int beta, Colo
     }
     
     std::vector<Move> moves = board.generateMoves(currentTurn);
-    
-    if (board.isDraw()) {
-        return 0;
-    }
     
     std::vector<std::pair<int, Move>> scoredMoves;
     scoredMoves.reserve(moves.size());
