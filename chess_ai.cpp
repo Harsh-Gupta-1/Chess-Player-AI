@@ -112,8 +112,7 @@ int ChessAI::negamax(Board& board, int depth, int ply, int alpha, int beta, Colo
     }
     
     if (depth == 0) {
-        int eval = board.evaluate();
-        return (currentTurn == WHITE) ? eval : -eval;
+        return quiescence(board, alpha, beta, currentTurn);
     }
     
     if (board.isCheckmate(currentTurn)) {
@@ -178,4 +177,55 @@ int ChessAI::negamax(Board& board, int depth, int ply, int alpha, int beta, Colo
     }
     
     return maxEval;
+}
+
+int ChessAI::quiescence(Board& board, int alpha, int beta, Color currentTurn) {
+    if ((nodesExplored & 2047) == 0) {
+        auto now = std::chrono::steady_clock::now();
+        if (std::chrono::duration_cast<std::chrono::milliseconds>(now - startTime).count() >= timeLimitMs) {
+            timeOut = true;
+        }
+    }
+    
+    if (timeOut) return 0;
+    nodesExplored++;
+
+    int standPat = board.evaluate();
+    if (currentTurn == BLACK) standPat = -standPat;
+    
+    if (standPat >= beta) return beta;
+    if (alpha < standPat) alpha = standPat;
+
+    std::vector<Move> allMoves = board.generateLegalMoves(currentTurn);
+    std::vector<std::pair<int, Move>> scoredCaptures;
+    
+    for (const Move& m : allMoves) {
+        // Only consider captures and promotions in Q-Search
+        if (board.getPiece(m.toX, m.toY).type != EMPTY || m.promotion != EMPTY) {
+            Move dummyTT;
+            scoredCaptures.push_back({scoreMove(m, dummyTT, board, 100, currentTurn), m});
+        }
+    }
+
+    std::sort(scoredCaptures.begin(), scoredCaptures.end(), [](const std::pair<int, Move>& a, const std::pair<int, Move>& b) {
+        return a.first > b.first;
+    });
+
+    for (const auto& pair : scoredCaptures) {
+        const Move& move = pair.second;
+        GameState prevState = board.gameState;
+        Piece captured = board.getPiece(move.toX, move.toY);
+        board.makeMove(move);
+        
+        int score = -quiescence(board, -beta, -alpha, currentTurn == WHITE ? BLACK : WHITE);
+        
+        board.undoMove(move, captured, prevState);
+        
+        if (timeOut) return 0;
+        
+        if (score >= beta) return beta;
+        if (score > alpha) alpha = score;
+    }
+    
+    return alpha;
 }
