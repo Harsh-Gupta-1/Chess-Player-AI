@@ -1,4 +1,4 @@
-# Chess-Player-AI
+# Chess-Player-AI (~1850 Elo)
 
 A simple command-line chess AI implemented in C++ using the minimax algorithm with alpha-beta pruning. The program allows users to play against the AI or run performance benchmarks to evaluate the AI's search efficiency.
 
