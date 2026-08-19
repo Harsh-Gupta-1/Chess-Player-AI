@@ -137,6 +137,9 @@ int ChessAI::negamax(Board& board, int depth, int ply, int alpha, int beta, Colo
     
     int maxEval = std::numeric_limits<int>::min() + 1;
     Move bestMoveForTT(0,0,0,0);
+    bool firstMove = true;
+    
+    bool inCheck = board.isInCheck(currentTurn);
     
     for (const auto& pair : scoredMoves) {
         const Move& move = pair.second;
@@ -144,7 +147,19 @@ int ChessAI::negamax(Board& board, int depth, int ply, int alpha, int beta, Colo
         Piece captured = board.getPiece(move.toX, move.toY);
         board.makeMove(move);
         
-        int eval = -negamax(board, depth - 1, ply + 1, -beta, -alpha, currentTurn == WHITE ? BLACK : WHITE);
+        int extension = (inCheck) ? 1 : 0;
+        int nextDepth = depth - 1 + extension;
+        int eval;
+        
+        if (firstMove) {
+            eval = -negamax(board, nextDepth, ply + 1, -beta, -alpha, currentTurn == WHITE ? BLACK : WHITE);
+            firstMove = false;
+        } else {
+            eval = -negamax(board, nextDepth, ply + 1, -alpha - 1, -alpha, currentTurn == WHITE ? BLACK : WHITE);
+            if (eval > alpha && eval < beta) {
+                eval = -negamax(board, nextDepth, ply + 1, -beta, -alpha, currentTurn == WHITE ? BLACK : WHITE);
+            }
+        }
         
         board.undoMove(move, captured, prevState);
         

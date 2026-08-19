@@ -7,8 +7,10 @@ A simple command-line chess AI implemented in C++ using the minimax algorithm wi
 - **Playable Chess Game**: Play against the AI in a text-based interface.
 - **Negamax with Alpha-Beta Pruning**: Uses a state-of-the-art Negamax formulation with Alpha-Beta pruning for move selection.
 - **Iterative Deepening**: Searches progressively deeper (depth 1, then 2, then 3...) to ensure the best moves are found early, drastically improving pruning.
+- **Principal Variation Search (PVS)**: Optimized Alpha-Beta pruning using zero-window searches for non-principal variation moves.
 - **Move Ordering**: Implements MVV-LVA (Most Valuable Victim - Least Valuable Attacker), Killer Heuristic, and History Heuristic to achieve 30x node reduction.
 - **Quiescence Search**: Eliminates the "Horizon Effect" by continuing to search all tactical captures at the end of the main search depth until a "quiet" position is reached.
+- **Selective Extensions**: Automatically extends the search depth when a king is in check, ensuring forced mate sequences are not overlooked.
 - **Time Management**: The engine can now be constrained to search within a specific time limit (e.g., 1000ms).
 - **Board Evaluation**: Evaluates positions based on material, piece-square tables, mobility, and pawn structure.
 - **Move Generation**: Supports all legal chess moves, including castling, en passant, and promotions.
