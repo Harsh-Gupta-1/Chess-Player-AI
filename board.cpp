@@ -174,6 +174,8 @@ void Board::setupBoard() {
     
     gameState.zobristKey = Zobrist::computeHash(*this, WHITE);
     
+    initCache();
+    
     historyPly = 0;
     history[historyPly++] = gameState.zobristKey;
 }
@@ -278,11 +280,39 @@ Color Board::loadFEN(const std::string& fen) {
     }
     
     gameState.zobristKey = Zobrist::computeHash(*this, activeColor);
-    
+    initCache();
     historyPly = 0;
     history[historyPly++] = gameState.zobristKey;
     
     return activeColor;
+}
+
+void Board::initCache() {
+    kingPos[WHITE] = {-1, -1};
+    kingPos[BLACK] = {-1, -1};
+    for (int c = 0; c < 2; c++) {
+        for (int t = 0; t < 6; t++) {
+            pieceCount[c][t] = 0;
+        }
+    }
+    gameState.pawnKey = 0;
+    
+    for (int x = 0; x < 8; x++) {
+        for (int y = 0; y < 8; y++) {
+            Piece p = board[x][y];
+            if (p.type != EMPTY) {
+                if (p.type != KING) {
+                    pieceCount[p.color][p.type]++;
+                } else {
+                    kingPos[p.color] = {x, y};
+                }
+                
+                if (p.type == PAWN) {
+                    gameState.pawnKey ^= Zobrist::pieceKeys[p.color][PAWN][x * 8 + y];
+                }
+            }
+        }
+    }
 }
 
 void Board::printBoard() {
@@ -319,14 +349,7 @@ Piece Board::getPiece(int x, int y) const {
 }
 
 std::pair<int, int> Board::findKing(Color color) const {
-    for (int x = 0; x < 8; x++) {
-        for (int y = 0; y < 8; y++) {
-            if (board[x][y].type == KING && board[x][y].color == color) {
-                return {x, y};
-            }
-        }
-    }
-    return {-1, -1};
+    return kingPos[color];
 }
 
 bool Board::isSquareUnderAttack(int x, int y, Color byColor) const {
@@ -400,6 +423,14 @@ void Board::makeMove(const Move& m) {
         gameState.fullmoveNumber++;
     }
     
+    if (movingPiece.type == KING) {
+        kingPos[movingPiece.color] = {m.toX, m.toY};
+    }
+    
+    if (movingPiece.type == PAWN) {
+        gameState.pawnKey ^= Zobrist::pieceKeys[movingPiece.color][PAWN][m.fromX * 8 + m.fromY];
+    }
+    
     int oldCastle = 0;
     if (gameState.whiteCanCastleKingside) oldCastle |= 1;
     if (gameState.whiteCanCastleQueenside) oldCastle |= 2;
@@ -416,11 +447,17 @@ void Board::makeMove(const Move& m) {
     if (m.isEnPassant) {
         Piece capturedPawn = board[m.fromX][m.toY];
         gameState.zobristKey ^= Zobrist::pieceKeys[capturedPawn.color][capturedPawn.type][m.fromX * 8 + m.toY];
+        gameState.pawnKey ^= Zobrist::pieceKeys[capturedPawn.color][PAWN][m.fromX * 8 + m.toY];
+        pieceCount[capturedPawn.color][PAWN]--;
         board[m.fromX][m.toY] = Piece();
     } else {
         Piece captured = board[m.toX][m.toY];
         if (captured.type != EMPTY) {
             gameState.zobristKey ^= Zobrist::pieceKeys[captured.color][captured.type][m.toX * 8 + m.toY];
+            if (captured.type == PAWN) {
+                gameState.pawnKey ^= Zobrist::pieceKeys[captured.color][PAWN][m.toX * 8 + m.toY];
+            }
+            pieceCount[captured.color][captured.type]--;
         }
     }
     
@@ -447,9 +484,14 @@ void Board::makeMove(const Move& m) {
     if (m.promotion != EMPTY) {
         placedPiece = Piece(m.promotion, movingPiece.color);
         board[m.toX][m.toY] = placedPiece;
+        pieceCount[movingPiece.color][PAWN]--;
+        pieceCount[placedPiece.color][placedPiece.type]++;
     }
     
     gameState.zobristKey ^= Zobrist::pieceKeys[placedPiece.color][placedPiece.type][m.toX * 8 + m.toY];
+    if (placedPiece.type == PAWN) {
+        gameState.pawnKey ^= Zobrist::pieceKeys[placedPiece.color][PAWN][m.toX * 8 + m.toY];
+    }
     
     updateGameState(m, movingPiece);
     
@@ -470,15 +512,26 @@ void Board::makeMove(const Move& m) {
 void Board::undoMove(const Move& m, const Piece& captured, const GameState& prevState) {
     Piece movingPiece = board[m.toX][m.toY];
     
+    if (movingPiece.type == KING) {
+        kingPos[movingPiece.color] = {m.fromX, m.fromY};
+    }
+    
     if (m.promotion != EMPTY) {
         movingPiece = Piece(PAWN, movingPiece.color);
+        pieceCount[movingPiece.color][PAWN]++;
+        pieceCount[movingPiece.color][m.promotion]--;
     }
     
     board[m.fromX][m.fromY] = movingPiece;
     board[m.toX][m.toY] = captured;
     
+    if (captured.type != EMPTY) {
+        pieceCount[captured.color][captured.type]++;
+    }
+    
     if (m.isEnPassant) {
         board[m.fromX][m.toY] = Piece(PAWN, movingPiece.color == WHITE ? BLACK : WHITE);
+        pieceCount[movingPiece.color == WHITE ? BLACK : WHITE][PAWN]++;
         board[m.toX][m.toY] = Piece();
     }
     
@@ -533,8 +586,7 @@ void Board::updateGameState(const Move& m, const Piece& movingPiece) {
     if (m.toX == 7 && m.toY == 7) gameState.blackCanCastleKingside = false;
 }
 
-std::vector<Move> Board::generateMoves(Color color) {
-    std::vector<Move> moves;
+void Board::generateMoves(Color color, MoveList& moves) {
 
     for (int x = 0; x < BOARD_SIZE; ++x) {
         for (int y = 0; y < BOARD_SIZE; ++y) {
@@ -566,26 +618,26 @@ std::vector<Move> Board::generateMoves(Color color) {
         }
     }
     
-    return moves;
+    
 }
 
-void Board::generatePawnMoves(int x, int y, Color color, std::vector<Move>& moves) {
+void Board::generatePawnMoves(int x, int y, Color color, MoveList& moves) {
     int dir = (color == WHITE) ? 1 : -1;
     int startRow = (color == WHITE) ? 1 : 6;
     int promotionRow = (color == WHITE) ? 7 : 0;
     
     if (isInBounds(x + dir, y) && board[x + dir][y].type == EMPTY) {
         if (x + dir == promotionRow) {
-            moves.emplace_back(x, y, x + dir, y, QUEEN);
-            moves.emplace_back(x, y, x + dir, y, ROOK);
-            moves.emplace_back(x, y, x + dir, y, BISHOP);
-            moves.emplace_back(x, y, x + dir, y, KNIGHT);
+            moves.push_back(Move(x, y, x + dir, y, QUEEN));
+            moves.push_back(Move(x, y, x + dir, y, ROOK));
+            moves.push_back(Move(x, y, x + dir, y, BISHOP));
+            moves.push_back(Move(x, y, x + dir, y, KNIGHT));
         } else {
-            moves.emplace_back(x, y, x + dir, y);
+            moves.push_back(Move(x, y, x + dir, y));
         }
         
         if (x == startRow && board[x + 2 * dir][y].type == EMPTY) {
-            moves.emplace_back(x, y, x + 2 * dir, y);
+            moves.push_back(Move(x, y, x + 2 * dir, y));
         }
     }
     
@@ -594,12 +646,12 @@ void Board::generatePawnMoves(int x, int y, Color color, std::vector<Move>& move
             Piece target = board[x + dir][y + dy];
             if (target.type != EMPTY && target.color != color) {
                 if (x + dir == promotionRow) {
-                    moves.emplace_back(x, y, x + dir, y + dy, QUEEN);
-                    moves.emplace_back(x, y, x + dir, y + dy, ROOK);
-                    moves.emplace_back(x, y, x + dir, y + dy, BISHOP);
-                    moves.emplace_back(x, y, x + dir, y + dy, KNIGHT);
+                    moves.push_back(Move(x, y, x + dir, y + dy, QUEEN));
+                    moves.push_back(Move(x, y, x + dir, y + dy, ROOK));
+                    moves.push_back(Move(x, y, x + dir, y + dy, BISHOP));
+                    moves.push_back(Move(x, y, x + dir, y + dy, KNIGHT));
                 } else {
-                    moves.emplace_back(x, y, x + dir, y + dy);
+                    moves.push_back(Move(x, y, x + dir, y + dy));
                 }
             }
         }
@@ -607,12 +659,12 @@ void Board::generatePawnMoves(int x, int y, Color color, std::vector<Move>& move
     
     if (gameState.hasEnPassant && x + dir == gameState.enPassantX) {
         if (y + 1 == gameState.enPassantY || y - 1 == gameState.enPassantY) {
-            moves.emplace_back(x, y, gameState.enPassantX, gameState.enPassantY, EMPTY, true);
+            moves.push_back(Move(x, y, gameState.enPassantX, gameState.enPassantY, EMPTY, true));
         }
     }
 }
 
-void Board::generateKnightMoves(int x, int y, Color color, std::vector<Move>& moves) {
+void Board::generateKnightMoves(int x, int y, Color color, MoveList& moves) {
     int dx[] = {-2,-1,1,2,2,1,-1,-2};
     int dy[] = {1,2,2,1,-1,-2,-2,-1};
     for (int i = 0; i < 8; i++) {
@@ -620,13 +672,13 @@ void Board::generateKnightMoves(int x, int y, Color color, std::vector<Move>& mo
         if (isInBounds(nx, ny)) {
             Piece target = board[nx][ny];
             if (target.type == EMPTY || target.color != color) {
-                moves.emplace_back(x, y, nx, ny);
+                moves.push_back(Move(x, y, nx, ny));
             }
         }
     }
 }
 
-void Board::generateBishopMoves(int x, int y, Color color, std::vector<Move>& moves) {
+void Board::generateBishopMoves(int x, int y, Color color, MoveList& moves) {
     int dirs[4][2] = {{-1,-1},{-1,1},{1,-1},{1,1}};
     for (int d = 0; d < 4; d++) {
         for (int i = 1; i < 8; i++) {
@@ -635,10 +687,10 @@ void Board::generateBishopMoves(int x, int y, Color color, std::vector<Move>& mo
             
             Piece target = board[nx][ny];
             if (target.type == EMPTY) {
-                moves.emplace_back(x, y, nx, ny);
+                moves.push_back(Move(x, y, nx, ny));
             } else {
                 if (target.color != color) {
-                    moves.emplace_back(x, y, nx, ny);
+                    moves.push_back(Move(x, y, nx, ny));
                 }
                 break;
             }
@@ -646,7 +698,7 @@ void Board::generateBishopMoves(int x, int y, Color color, std::vector<Move>& mo
     }
 }
 
-void Board::generateRookMoves(int x, int y, Color color, std::vector<Move>& moves) {
+void Board::generateRookMoves(int x, int y, Color color, MoveList& moves) {
     int dirs[4][2] = {{-1,0},{1,0},{0,-1},{0,1}};
     for (int d = 0; d < 4; d++) {
         for (int i = 1; i < 8; i++) {
@@ -655,10 +707,10 @@ void Board::generateRookMoves(int x, int y, Color color, std::vector<Move>& move
             
             Piece target = board[nx][ny];
             if (target.type == EMPTY) {
-                moves.emplace_back(x, y, nx, ny);
+                moves.push_back(Move(x, y, nx, ny));
             } else {
                 if (target.color != color) {
-                    moves.emplace_back(x, y, nx, ny);
+                    moves.push_back(Move(x, y, nx, ny));
                 }
                 break;
             }
@@ -666,12 +718,12 @@ void Board::generateRookMoves(int x, int y, Color color, std::vector<Move>& move
     }
 }
 
-void Board::generateQueenMoves(int x, int y, Color color, std::vector<Move>& moves) {
+void Board::generateQueenMoves(int x, int y, Color color, MoveList& moves) {
     generateBishopMoves(x, y, color, moves);
     generateRookMoves(x, y, color, moves);
 }
 
-void Board::generateKingMoves(int x, int y, Color color, std::vector<Move>& moves) {
+void Board::generateKingMoves(int x, int y, Color color, MoveList& moves) {
     for (int dx = -1; dx <= 1; dx++) {
         for (int dy = -1; dy <= 1; dy++) {
             if (dx == 0 && dy == 0) continue;
@@ -679,7 +731,7 @@ void Board::generateKingMoves(int x, int y, Color color, std::vector<Move>& move
             if (isInBounds(nx, ny)) {
                 Piece target = board[nx][ny];
                 if (target.type == EMPTY || target.color != color) {
-                    moves.emplace_back(x, y, nx, ny);
+                    moves.push_back(Move(x, y, nx, ny));
                 }
             }
         }
@@ -690,31 +742,31 @@ void Board::generateKingMoves(int x, int y, Color color, std::vector<Move>& move
             if (gameState.whiteCanCastleKingside && 
                 board[0][5].type == EMPTY && board[0][6].type == EMPTY &&
                 !isSquareUnderAttack(0, 5, BLACK) && !isSquareUnderAttack(0, 6, BLACK)) {
-                moves.emplace_back(x, y, 0, 6, EMPTY, false, true);
+                moves.push_back(Move(x, y, 0, 6, EMPTY, false, true));
             }
             if (gameState.whiteCanCastleQueenside && 
                 board[0][1].type == EMPTY && board[0][2].type == EMPTY && board[0][3].type == EMPTY &&
                 !isSquareUnderAttack(0, 2, BLACK) && !isSquareUnderAttack(0, 3, BLACK)) {
-                moves.emplace_back(x, y, 0, 2, EMPTY, false, true);
+                moves.push_back(Move(x, y, 0, 2, EMPTY, false, true));
             }
         } else {
             if (gameState.blackCanCastleKingside && 
                 board[7][5].type == EMPTY && board[7][6].type == EMPTY &&
                 !isSquareUnderAttack(7, 5, WHITE) && !isSquareUnderAttack(7, 6, WHITE)) {
-                moves.emplace_back(x, y, 7, 6, EMPTY, false, true);
+                moves.push_back(Move(x, y, 7, 6, EMPTY, false, true));
             }
             if (gameState.blackCanCastleQueenside && 
                 board[7][1].type == EMPTY && board[7][2].type == EMPTY && board[7][3].type == EMPTY &&
                 !isSquareUnderAttack(7, 2, WHITE) && !isSquareUnderAttack(7, 3, WHITE)) {
-                moves.emplace_back(x, y, 7, 2, EMPTY, false, true);
+                moves.push_back(Move(x, y, 7, 2, EMPTY, false, true));
             }
         }
     }
 }
 
-std::vector<Move> Board::generateLegalMoves(Color color) {
-    std::vector<Move> allMoves = generateMoves(color);
-    std::vector<Move> legalMoves;
+void Board::generateLegalMoves(Color color, MoveList& legalMoves) {
+    MoveList allMoves;
+    generateMoves(color, allMoves);
     
     for (const Move& move : allMoves) {
         GameState prevState = gameState;
@@ -729,32 +781,31 @@ std::vector<Move> Board::generateLegalMoves(Color color) {
         undoMove(move, captured, prevState);
     }
     
-    return legalMoves;
-}
+    }
 
 bool Board::isCheckmate(Color color) {
-    return isInCheck(color) && generateLegalMoves(color).empty();
+    if (!isInCheck(color)) return false;
+    MoveList moves;
+    generateLegalMoves(color, moves);
+    return moves.empty();
 }
 
 bool Board::isStalemate(Color color) {
-    return !isInCheck(color) && generateLegalMoves(color).empty();
+    if (isInCheck(color)) return false;
+    MoveList moves;
+    generateLegalMoves(color, moves);
+    return moves.empty();
 }
 
 bool Board::hasNonPawnMaterial(Color color) const {
-    for (int x = 0; x < 8; x++) {
-        for (int y = 0; y < 8; y++) {
-            if (board[x][y].color == color && 
-                board[x][y].type != EMPTY && 
-                board[x][y].type != PAWN && 
-                board[x][y].type != KING) {
-                return true;
-            }
-        }
-    }
-    return false;
+    return pieceCount[color][KNIGHT] > 0 || 
+           pieceCount[color][BISHOP] > 0 || 
+           pieceCount[color][ROOK] > 0 || 
+           pieceCount[color][QUEEN] > 0;
 }
 
 bool Board::isRepetition() const {
+    if (gameState.halfmoveClock < 4) return false;
     if (historyPly < 4) return false;
     int limit = std::max(0, historyPly - gameState.halfmoveClock);
     int repetitions = 0;
@@ -769,27 +820,13 @@ bool Board::isRepetition() const {
 }
 
 bool Board::isInsufficientMaterial() {
-    std::vector<PieceType> whitePieces, blackPieces;
-    for (int x = 0; x < 8; x++) {
-        for (int y = 0; y < 8; y++) {
-            if (board[x][y].type != EMPTY && board[x][y].type != KING) {
-                if (board[x][y].color == WHITE) {
-                    whitePieces.push_back(board[x][y].type);
-                } else {
-                    blackPieces.push_back(board[x][y].type);
-                }
-            }
-        }
-    }
+    int whitePieces = pieceCount[WHITE][PAWN] + pieceCount[WHITE][KNIGHT] + pieceCount[WHITE][BISHOP] + pieceCount[WHITE][ROOK] + pieceCount[WHITE][QUEEN];
+    int blackPieces = pieceCount[BLACK][PAWN] + pieceCount[BLACK][KNIGHT] + pieceCount[BLACK][BISHOP] + pieceCount[BLACK][ROOK] + pieceCount[BLACK][QUEEN];
     
-    if (whitePieces.empty() && blackPieces.empty()) return true;
+    if (whitePieces == 0 && blackPieces == 0) return true;
     
-    if ((whitePieces.size() == 1 && blackPieces.empty() && 
-         (whitePieces[0] == BISHOP || whitePieces[0] == KNIGHT)) ||
-        (blackPieces.size() == 1 && whitePieces.empty() && 
-         (blackPieces[0] == BISHOP || blackPieces[0] == KNIGHT))) {
-        return true;
-    }
+    if (whitePieces == 1 && blackPieces == 0 && pieceCount[WHITE][PAWN] == 0 && pieceCount[WHITE][ROOK] == 0 && pieceCount[WHITE][QUEEN] == 0) return true;
+    if (blackPieces == 1 && whitePieces == 0 && pieceCount[BLACK][PAWN] == 0 && pieceCount[BLACK][ROOK] == 0 && pieceCount[BLACK][QUEEN] == 0) return true;
     
     return false;
 }
@@ -800,12 +837,22 @@ bool Board::isDraw() {
 }
 
 int Board::evaluateMobility() {
-    int whiteMobility = generateMoves(WHITE).size();
-    int blackMobility = generateMoves(BLACK).size();
+    MoveList wm;
+    generateMoves(WHITE, wm);
+    int whiteMobility = wm.size();
+    MoveList bm;
+    generateMoves(BLACK, bm);
+    int blackMobility = bm.size();
     return (whiteMobility - blackMobility) * 10;
 }
 
 std::pair<int, int> Board::evaluatePawnStructure() {
+    int hashIndex = gameState.pawnKey & 16383;
+    PawnEntry& entry = pawnTable[hashIndex];
+    if (entry.valid && entry.key == gameState.pawnKey) {
+        return {entry.mgScore, entry.egScore};
+    }
+    
     int mgScore = 0;
     int egScore = 0;
     
@@ -886,6 +933,11 @@ std::pair<int, int> Board::evaluatePawnStructure() {
             }
         }
     }
+    
+    entry.key = gameState.pawnKey;
+    entry.mgScore = mgScore;
+    entry.egScore = egScore;
+    entry.valid = true;
     
     return std::make_pair(mgScore, egScore);
 }

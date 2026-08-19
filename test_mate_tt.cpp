@@ -20,14 +20,16 @@ void run_tt_mate_tests() {
     Move dummyMove(0,0,0,0);
     
     // store(key, depth, ply, score, bound, bestMove)
-    ai.tt.store(testKey, 10, 5, 9993, EXACT, dummyMove);
+    bool collision;
+    ai.tt.store(testKey, 10, 5, 9993, EXACT, dummyMove, collision);
     
     // Now let's retrieve it from ply 2.
     // We probe at ply 2. TT should reconstruct the score:
     // score = 9998 - 2 = 9996. (Which represents mate at ply 4 from the new root, meaning mate in 2 plies).
     int returnScore = 0;
     Move returnMove(0,0,0,0);
-    bool hit = ai.tt.probe(testKey, 5, 2, -10000, 10000, returnScore, returnMove);
+    bool hit;
+    ai.tt.probe(testKey, 5, 2, -10000, 10000, returnScore, returnMove, hit);
     
     std::cout << "Test 1 [Winning Mate Normalization]: ";
     if (hit && returnScore == 9996) {
@@ -40,11 +42,11 @@ void run_tt_mate_tests() {
     // 2. Test Losing Mate Normalization
     // Engine finds it gets mated at ply 8. Score = -10000 + 8 = -9992.
     // We are at ply 3. TT stores: -9992 - 3 = -9995.
-    ai.tt.store(testKey + 1, 10, 3, -9992, EXACT, dummyMove);
+    ai.tt.store(testKey + 1, 10, 3, -9992, EXACT, dummyMove, collision);
     
     // Retrieve at ply 6.
     // TT reconstructs: -9995 + 6 = -9989 (meaning mate at ply 11 from the new root. 11 - 6 = 5 plies to mate. Which matches 8 - 3 = 5 plies to mate).
-    hit = ai.tt.probe(testKey + 1, 5, 6, -10000, 10000, returnScore, returnMove);
+    ai.tt.probe(testKey + 1, 5, 6, -10000, 10000, returnScore, returnMove, hit);
     
     std::cout << "Test 2 [Losing Mate Normalization]: ";
     if (hit && returnScore == -9989) {

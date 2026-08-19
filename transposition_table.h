@@ -30,4 +30,17 @@ public:
     void clear();
 };
 
+struct PawnEntry {
+    unsigned long long key;
+    int mgScore;
+    int egScore;
+};
+
+class PawnTable {
+public:
+    static PawnEntry table[131072];
+    static void store(unsigned long long key, int mgScore, int egScore);
+    static std::pair<int, int> probe(unsigned long long key);
+};
+
 #endif // TT_H

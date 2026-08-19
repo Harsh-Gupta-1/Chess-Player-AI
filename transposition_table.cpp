@@ -20,7 +20,7 @@ void TranspositionTable::clear() {
 }
 
 void TranspositionTable::store(unsigned long long key, int depth, int ply, int score, Bound bound, Move bestMove, bool& collision) {
-    int index = key % size;
+    int index = key & (size - 1);
     // Check collision (valid entry and different key)
     collision = table[index].valid && table[index].key != key;
     
@@ -38,7 +38,7 @@ void TranspositionTable::store(unsigned long long key, int depth, int ply, int s
 }
 
 bool TranspositionTable::probe(unsigned long long key, int depth, int ply, int alpha, int beta, int& returnScore, Move& bestMove, bool& hit) {
-    int index = key % size;
+    int index = key & (size - 1);
     TTEntry& entry = table[index];
 
     hit = false;
@@ -64,4 +64,17 @@ bool TranspositionTable::probe(unsigned long long key, int depth, int ply, int a
         }
     }
     return false;
+}
+
+PawnEntry PawnTable::table[131072] = {0};
+void PawnTable::store(unsigned long long key, int mgScore, int egScore) {
+    int index = key % 131072;
+    table[index].key = key;
+    table[index].mgScore = mgScore;
+    table[index].egScore = egScore;
+}
+std::pair<int, int> PawnTable::probe(unsigned long long key) {
+    int index = key % 131072;
+    if (table[index].key == key) return {table[index].mgScore, table[index].egScore};
+    return {-1000000, -1000000};
 }

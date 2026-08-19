@@ -49,7 +49,8 @@ Move ChessAI::getBestMove(Board& board, Color aiColor, int maxDepth) {
 
     Move bestMove(0, 0, 0, 0);
 
-    std::vector<Move> initialLegalMoves = board.generateLegalMoves(aiColor);
+    Board::MoveList initialLegalMoves;
+    board.generateLegalMoves(aiColor, initialLegalMoves);
     if (initialLegalMoves.empty()) {
         return bestMove; // Terminal state at root
     }
@@ -59,26 +60,34 @@ Move ChessAI::getBestMove(Board& board, Color aiColor, int maxDepth) {
         int beta = std::numeric_limits<int>::max() - 1;
         int bestScore = std::numeric_limits<int>::min() + 1;
         
-        std::vector<Move> legalMoves = board.generateLegalMoves(aiColor);
+        Board::MoveList legalMoves;
+        board.generateLegalMoves(aiColor, legalMoves);
         if (legalMoves.empty()) break;
         
         Move currentBestMove = bestMove;
 
-        std::vector<std::pair<int, Move>> scoredMoves;
-        scoredMoves.reserve(legalMoves.size());
-        for (const auto& move : legalMoves) {
-            scoredMoves.push_back({scoreMove(move, currentBestMove, board, 0, aiColor), move});
-        }
-        std::sort(scoredMoves.begin(), scoredMoves.end(), [](const std::pair<int, Move>& a, const std::pair<int, Move>& b) {
-            return a.first > b.first;
-        });
-
-        if (depth == 1 && !scoredMoves.empty()) {
-            currentBestMove = scoredMoves[0].second;
+        int moveScores[256];
+        for (int i = 0; i < legalMoves.size(); i++) {
+            moveScores[i] = scoreMove(legalMoves[i], currentBestMove, board, 0, aiColor);
         }
 
-        for (const auto& pair : scoredMoves) {
-            const Move& move = pair.second;
+        if (depth == 1 && legalMoves.size() > 0) {
+            int bestIdx = 0;
+            for (int j = 1; j < legalMoves.size(); j++) {
+                if (moveScores[j] > moveScores[bestIdx]) bestIdx = j;
+            }
+            currentBestMove = legalMoves[bestIdx];
+        }
+
+        for (int i = 0; i < legalMoves.size(); i++) {
+            int bestIdx = i;
+            for (int j = i + 1; j < legalMoves.size(); j++) {
+                if (moveScores[j] > moveScores[bestIdx]) bestIdx = j;
+            }
+            std::swap(legalMoves[i], legalMoves[bestIdx]);
+            std::swap(moveScores[i], moveScores[bestIdx]);
+            
+            const Move& move = legalMoves[i];
             GameState prevState = board.gameState;
             Piece captured = board.getPiece(move.toX, move.toY);
             board.makeMove(move);
@@ -187,24 +196,28 @@ int ChessAI::negamax(Board& board, int depth, int ply, int alpha, int beta, Colo
         }
     }
     
-    std::vector<Move> moves = board.generateMoves(currentTurn);
+    Board::MoveList moves;
+    board.generateMoves(currentTurn, moves);
     
-    std::vector<std::pair<int, Move>> scoredMoves;
-    scoredMoves.reserve(moves.size());
-    for (const auto& move : moves) {
-        scoredMoves.push_back({scoreMove(move, ttMove, board, ply, currentTurn), move});
+    int moveScores[256];
+    for (int i = 0; i < moves.size(); i++) {
+        moveScores[i] = scoreMove(moves[i], ttMove, board, ply, currentTurn);
     }
-    std::sort(scoredMoves.begin(), scoredMoves.end(), [](const std::pair<int, Move>& a, const std::pair<int, Move>& b) {
-        return a.first > b.first;
-    });
     
     int maxEval = std::numeric_limits<int>::min() + 1;
     Move bestMoveForTT(0,0,0,0);
     int moveCount = 0;
     int legalMovesCount = 0;
     
-    for (const auto& pair : scoredMoves) {
-        const Move& move = pair.second;
+    for (int i = 0; i < moves.size(); i++) {
+        int bestIdx = i;
+        for (int j = i + 1; j < moves.size(); j++) {
+            if (moveScores[j] > moveScores[bestIdx]) bestIdx = j;
+        }
+        std::swap(moves[i], moves[bestIdx]);
+        std::swap(moveScores[i], moveScores[bestIdx]);
+        
+        const Move& move = moves[i];
         GameState prevState = board.gameState;
         Piece captured = board.getPiece(move.toX, move.toY);
         board.makeMove(move);
@@ -326,7 +339,8 @@ int ChessAI::quiescence(Board& board, int ply, int alpha, int beta, Color curren
         if (alpha < standPat) alpha = standPat;
     }
 
-    std::vector<Move> allMoves = board.generateMoves(currentTurn);
+    Board::MoveList allMoves;
+    board.generateMoves(currentTurn, allMoves);
     
     std::vector<std::pair<int, Move>> scoredMoves;
     

@@ -7,7 +7,8 @@ long long perft(Board& board, Color turn, int depth) {
     if (depth == 0) return 1;
     
     long long nodes = 0;
-    std::vector<Move> moves = board.generateLegalMoves(turn);
+    Board::MoveList moves;
+    board.generateLegalMoves(turn, moves);
     
     for (const auto& move : moves) {
         GameState prevState = board.gameState;

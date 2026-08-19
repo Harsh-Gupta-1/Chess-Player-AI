@@ -58,7 +58,7 @@ public:
     bool enableKiller = true;
     bool enableHistory = true;
     
-    ChessAI() : tt(4000003) { // 4 Million entries (~128MB RAM)
+    ChessAI() : tt(4194304) { // exactly 2^22 entries (~134MB RAM)
         Zobrist::init();
         for(int i=0; i<100; i++) {
             killerMoves[i][0] = Move(0,0,0,0);

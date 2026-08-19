@@ -135,7 +135,8 @@ void Game::playerTurn(Color color) {
             }
         }
 
-        std::vector<Move> legalMoves = board.generateLegalMoves(color);
+        Board::MoveList legalMoves;
+        board.generateLegalMoves(color, legalMoves);
         bool found = false;
 
         for (const auto& move : legalMoves) {

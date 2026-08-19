@@ -21,7 +21,8 @@ std::string UCI::moveToString(const Move& m) {
 }
 
 Move UCI::parseMove(Board& board, Color color, const std::string& moveStr) {
-    std::vector<Move> moves = board.generateLegalMoves(color);
+    Board::MoveList moves;
+    board.generateLegalMoves(color, moves);
     for (const Move& m : moves) {
         if (moveToString(m) == moveStr) {
             return m;
@@ -163,4 +164,8 @@ void UCI::loop() {
             break;
         }
     }
+    
+    // Ensure thread is joined before exiting UCI loop (e.g. EOF)
+    ai.stopSearch = true;
+    if (searchThread.joinable()) searchThread.join();
 }
