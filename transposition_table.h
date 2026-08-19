@@ -25,8 +25,8 @@ public:
     TranspositionTable(int numEntries);
     ~TranspositionTable();
 
-    void store(unsigned long long key, int depth, int ply, int score, Bound bound, Move bestMove);
-    bool probe(unsigned long long key, int depth, int ply, int alpha, int beta, int& returnScore, Move& bestMove);
+    void store(unsigned long long key, int depth, int ply, int score, Bound bound, Move bestMove, bool& collision);
+    bool probe(unsigned long long key, int depth, int ply, int alpha, int beta, int& returnScore, Move& bestMove, bool& hit);
     void clear();
 };
 

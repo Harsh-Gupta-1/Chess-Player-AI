@@ -141,9 +141,15 @@ int ChessAI::negamax(Board& board, int depth, int ply, int alpha, int beta, Colo
         return 0;
     }
     
-    if (tt.probe(hashKey, depth, ply, alpha, beta, ttScore, ttMove)) {
-        stats.ttHits++;
+    stats.ttProbes++;
+    bool hit;
+    if (tt.probe(hashKey, depth, ply, alpha, beta, ttScore, ttMove, hit)) {
+        if (hit) stats.ttHits++;
+        stats.ttUsableHits++;
+        stats.ttCutoffs++;
         return ttScore;
+    } else if (hit) {
+        stats.ttHits++;
     }
     
     // Cap maximum search depth to prevent stack overflow from runaway check extensions
@@ -156,6 +162,7 @@ int ChessAI::negamax(Board& board, int depth, int ply, int alpha, int beta, Colo
     // Null Move Pruning: if we can pass our turn and still get a beta cutoff,
     // the position is so good we can prune it.
     if (enableNullMove && allowNull && depth >= 3 && !inCheck && board.hasNonPawnMaterial(currentTurn)) {
+        stats.nullAttempts++;
         // Make null move: just flip side to move via Zobrist
         GameState prevState = board.gameState;
         board.gameState.zobristKey ^= Zobrist::sideKey;
@@ -228,11 +235,17 @@ int ChessAI::negamax(Board& board, int depth, int ply, int alpha, int beta, Colo
             eval = -negamax(board, nextDepth, ply + 1, -beta, -alpha, currentTurn == WHITE ? BLACK : WHITE, true);
         } else {
             // Try reduced depth first (LMR)
-            stats.lmrReductions++;
+            if (reduction > 0) {
+                stats.lmrAttempts++;
+                stats.lmrReductions++;
+            } else {
+                stats.pvsSearches++;
+            }
             eval = -negamax(board, nextDepth - reduction, ply + 1, -alpha - 1, -alpha, currentTurn == WHITE ? BLACK : WHITE, true);
             // Re-search at full depth if it looks promising
             if (eval > alpha && (reduction > 0 || eval < beta)) {
-                stats.pvsResearches++;
+                if (reduction > 0) stats.lmrResearches++;
+                else stats.pvsResearches++;
                 eval = -negamax(board, nextDepth, ply + 1, -beta, -alpha, currentTurn == WHITE ? BLACK : WHITE, true);
             }
         }
@@ -248,6 +261,14 @@ int ChessAI::negamax(Board& board, int depth, int ply, int alpha, int beta, Colo
         
         alpha = std::max(alpha, eval);
         if (alpha >= beta) {
+            stats.betaCutoffs++;
+            if (moveCount == 1) stats.firstMoveCutoffs++;
+            
+            if (isKiller) stats.killerHits++;
+            else if (captured.type == EMPTY && historyMoves[currentTurn][move.fromX * 8 + move.fromY][move.toX * 8 + move.toY] > 0) {
+                stats.historyHits++;
+            }
+            
             if (captured.type == EMPTY) {
                 if (ply < 100 && !isSameMove(move, killerMoves[ply][0])) {
                     killerMoves[ply][1] = killerMoves[ply][0];
@@ -269,7 +290,10 @@ int ChessAI::negamax(Board& board, int depth, int ply, int alpha, int beta, Colo
     else if (maxEval >= beta) bound = LOWER_BOUND;
     
     if (!stopSearch) {
-        tt.store(hashKey, depth, ply, maxEval, bound, bestMoveForTT);
+        bool collision;
+        tt.store(hashKey, depth, ply, maxEval, bound, bestMoveForTT, collision);
+        stats.ttStores++;
+        if (collision) stats.ttCollisions++;
     }
     
     return maxEval;

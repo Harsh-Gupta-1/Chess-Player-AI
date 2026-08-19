@@ -21,15 +21,29 @@ public:
     
     // Telemetry
     struct SearchStats {
-        long long ttHits = 0;
-        long long ttCutoffs = 0;
         long long qNodes = 0;
-        long long nullCutoffs = 0;
-        long long lmrReductions = 0;
+        long long betaCutoffs = 0;
+        long long firstMoveCutoffs = 0;
+        long long ttProbes = 0;
+        long long ttHits = 0;
+        long long ttUsableHits = 0;
+        long long ttCutoffs = 0;
+        long long ttStores = 0;
+        long long ttCollisions = 0;
+        long long pvsSearches = 0;
         long long pvsResearches = 0;
+        long long lmrAttempts = 0;
+        long long lmrReductions = 0;
+        long long lmrResearches = 0;
+        long long nullAttempts = 0;
+        long long nullCutoffs = 0;
+        long long killerHits = 0;
+        long long historyHits = 0;
         
         void clear() {
-            ttHits = ttCutoffs = qNodes = nullCutoffs = lmrReductions = pvsResearches = 0;
+            qNodes = betaCutoffs = firstMoveCutoffs = ttProbes = ttHits = ttUsableHits = ttCutoffs = ttStores = ttCollisions = 0;
+            pvsSearches = pvsResearches = lmrAttempts = lmrReductions = lmrResearches = 0;
+            nullAttempts = nullCutoffs = killerHits = historyHits = 0;
         }
     } stats;
     

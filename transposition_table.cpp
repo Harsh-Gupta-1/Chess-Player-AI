@@ -19,8 +19,11 @@ void TranspositionTable::clear() {
     }
 }
 
-void TranspositionTable::store(unsigned long long key, int depth, int ply, int score, Bound bound, Move bestMove) {
+void TranspositionTable::store(unsigned long long key, int depth, int ply, int score, Bound bound, Move bestMove, bool& collision) {
     int index = key % size;
+    // Check collision (valid entry and different key)
+    collision = table[index].valid && table[index].key != key;
+    
     // Always replace scheme
     table[index].key = key;
     // Normalize mate scores to be relative to the node, not the root
@@ -34,11 +37,13 @@ void TranspositionTable::store(unsigned long long key, int depth, int ply, int s
     table[index].valid = true;
 }
 
-bool TranspositionTable::probe(unsigned long long key, int depth, int ply, int alpha, int beta, int& returnScore, Move& bestMove) {
+bool TranspositionTable::probe(unsigned long long key, int depth, int ply, int alpha, int beta, int& returnScore, Move& bestMove, bool& hit) {
     int index = key % size;
     TTEntry& entry = table[index];
 
+    hit = false;
     if (entry.valid && entry.key == key) {
+        hit = true;
         bestMove = entry.bestMove;
         if (entry.depth >= depth) {
             // Reconstruct the root-relative score from the node-relative score stored in TT

@@ -46,6 +46,9 @@ void benchmark(int argc, char* argv[]) {
               << std::setw(15) << "NPS" << std::endl;
     std::cout << std::string(65, '-') << std::endl;
 
+    ChessAI::SearchStats totalStats;
+    totalStats.clear();
+
     for (const auto& pos : positions) {
         Board board;
         Color turn = board.loadFEN(pos.fen);
@@ -60,6 +63,25 @@ void benchmark(int argc, char* argv[]) {
         totalNodes += nodes;
         totalTime += duration;
         
+        totalStats.qNodes += ai.stats.qNodes;
+        totalStats.betaCutoffs += ai.stats.betaCutoffs;
+        totalStats.firstMoveCutoffs += ai.stats.firstMoveCutoffs;
+        totalStats.ttProbes += ai.stats.ttProbes;
+        totalStats.ttHits += ai.stats.ttHits;
+        totalStats.ttUsableHits += ai.stats.ttUsableHits;
+        totalStats.ttCutoffs += ai.stats.ttCutoffs;
+        totalStats.ttStores += ai.stats.ttStores;
+        totalStats.ttCollisions += ai.stats.ttCollisions;
+        totalStats.pvsSearches += ai.stats.pvsSearches;
+        totalStats.pvsResearches += ai.stats.pvsResearches;
+        totalStats.lmrAttempts += ai.stats.lmrAttempts;
+        totalStats.lmrReductions += ai.stats.lmrReductions;
+        totalStats.lmrResearches += ai.stats.lmrResearches;
+        totalStats.nullAttempts += ai.stats.nullAttempts;
+        totalStats.nullCutoffs += ai.stats.nullCutoffs;
+        totalStats.killerHits += ai.stats.killerHits;
+        totalStats.historyHits += ai.stats.historyHits;
+        
         double nps = nodes / duration;
         
         std::cout << std::left << std::setw(20) << pos.name
@@ -73,5 +95,28 @@ void benchmark(int argc, char* argv[]) {
               << std::setw(15) << totalNodes
               << std::setw(15) << std::fixed << std::setprecision(4) << totalTime
               << std::setw(15) << static_cast<long long>(totalNodes / totalTime) << "  (Avg NPS)" << std::endl;
-    std::cout << std::string(33, '-') << std::endl;
+    std::cout << std::string(65, '-') << std::endl;
+    
+    // Programmatic telemetry block
+    std::cout << "\n[TELEMETRY]" << std::endl;
+    std::cout << "Nodes: " << totalNodes << std::endl;
+    std::cout << "QNodes: " << totalStats.qNodes << std::endl;
+    std::cout << "BetaCutoffs: " << totalStats.betaCutoffs << std::endl;
+    std::cout << "FirstMoveCutoffs: " << totalStats.firstMoveCutoffs << std::endl;
+    std::cout << "TTProbes: " << totalStats.ttProbes << std::endl;
+    std::cout << "TTHits: " << totalStats.ttHits << std::endl;
+    std::cout << "TTUsableHits: " << totalStats.ttUsableHits << std::endl;
+    std::cout << "TTCutoffs: " << totalStats.ttCutoffs << std::endl;
+    std::cout << "TTStores: " << totalStats.ttStores << std::endl;
+    std::cout << "TTCollisions: " << totalStats.ttCollisions << std::endl;
+    std::cout << "PVSSearches: " << totalStats.pvsSearches << std::endl;
+    std::cout << "PVSResearches: " << totalStats.pvsResearches << std::endl;
+    std::cout << "LMRAttempts: " << totalStats.lmrAttempts << std::endl;
+    std::cout << "LMRReductions: " << totalStats.lmrReductions << std::endl;
+    std::cout << "LMRResearches: " << totalStats.lmrResearches << std::endl;
+    std::cout << "NullAttempts: " << totalStats.nullAttempts << std::endl;
+    std::cout << "NullCutoffs: " << totalStats.nullCutoffs << std::endl;
+    std::cout << "KillerHits: " << totalStats.killerHits << std::endl;
+    std::cout << "HistoryHits: " << totalStats.historyHits << std::endl;
+    std::cout << "[/TELEMETRY]" << std::endl;
 }
