@@ -79,38 +79,49 @@ void UCI::loop() {
             }
         }
         else if (command == "go") {
-            int depth = 4;
-            long long movetime = 1000;
+            int depth = 4; // Default to 4 if absolutely no args are provided
             bool useTime = false;
+            long long timeRemaining = 0;
+            long long increment = 0;
+            long long exactMovetime = 0;
+            bool useExactMovetime = false;
             
             std::string arg;
             while (iss >> arg) {
-                if (arg == "depth") iss >> depth;
-                else if (arg == "movetime") { iss >> movetime; useTime = true; }
-                else if (arg == "wtime") {
-                    long long t; iss >> t;
-                    if (turn == WHITE) { movetime = t / 40; useTime = true; } // slightly more conservative
-                }
-                else if (arg == "btime") {
-                    long long t; iss >> t;
-                    if (turn == BLACK) { movetime = t / 40; useTime = true; }
-                }
-                else if (arg == "winc") {
-                    long long inc; iss >> inc;
-                    if (turn == WHITE && useTime) { movetime += (inc * 3) / 4; }
-                }
-                else if (arg == "binc") {
-                    long long inc; iss >> inc;
-                    if (turn == BLACK && useTime) { movetime += (inc * 3) / 4; }
+                if (arg == "depth") { iss >> depth; }
+                else if (arg == "movetime") { iss >> exactMovetime; useExactMovetime = true; useTime = true; }
+                else if (arg == "wtime" && turn == WHITE) { iss >> timeRemaining; useTime = true; }
+                else if (arg == "btime" && turn == BLACK) { iss >> timeRemaining; useTime = true; }
+                else if (arg == "winc" && turn == WHITE) { iss >> increment; }
+                else if (arg == "binc" && turn == BLACK) { iss >> increment; }
+                else if (arg == "wtime" || arg == "btime" || arg == "winc" || arg == "binc") {
+                    // Ignore opponent's time
+                    long long dummy; iss >> dummy;
                 }
             }
             
             if (useTime) {
-                if (movetime < 50) movetime = 50; // Minimum safety buffer
-                ai.timeLimitMs = movetime;
-                depth = 100; // Search until time out
+                long long allocatedTime;
+                if (useExactMovetime) {
+                    allocatedTime = exactMovetime;
+                } else {
+                    // Allocate 1/30th of remaining time, plus a fraction of the increment
+                    allocatedTime = (timeRemaining / 30) + (increment * 3 / 4);
+                    
+                    // Critical safety threshold: Never use more than remaining time minus a buffer
+                    if (allocatedTime > timeRemaining - 50) {
+                        allocatedTime = timeRemaining - 50;
+                    }
+                    if (allocatedTime < 10) allocatedTime = 10;
+                }
+                
+                ai.timeLimitMs = allocatedTime;
+                // If depth wasn't explicitly provided via 'go depth X', search as deep as possible within time
+                if (depth == 4 && (timeRemaining > 0 || useExactMovetime)) {
+                    depth = 64; 
+                }
             } else {
-                ai.timeLimitMs = 10000000; // effectively infinite
+                ai.timeLimitMs = 1000000; // Practically infinite if no time limit
             }
             
             Move best = ai.getBestMove(board, turn, depth);

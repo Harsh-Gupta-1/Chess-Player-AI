@@ -18,9 +18,30 @@ public:
     long long timeLimitMs = 1000;
     bool timeOut = false;
     
+    // Telemetry
+    struct SearchStats {
+        long long ttHits = 0;
+        long long ttCutoffs = 0;
+        long long qNodes = 0;
+        long long nullCutoffs = 0;
+        long long lmrReductions = 0;
+        long long pvsResearches = 0;
+        
+        void clear() {
+            ttHits = ttCutoffs = qNodes = nullCutoffs = lmrReductions = pvsResearches = 0;
+        }
+    } stats;
+    
+    
     // Heuristics
     Move killerMoves[100][2];
     int historyMoves[2][64][64];
+    
+    // Ablation Flags
+    bool enableNullMove = true;
+    bool enableLMR = true;
+    bool enableKiller = true;
+    bool enableHistory = true;
     
     ChessAI() : tt(4000003) { // 4 Million entries (~128MB RAM)
         Zobrist::init();

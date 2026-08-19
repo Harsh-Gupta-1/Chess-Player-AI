@@ -12,7 +12,7 @@ int main(int argc, char* argv[]) {
     }
 
     if (argc > 1 && std::string(argv[1]) == "bench") {
-        benchmark();
+        benchmark(argc, argv);
         return 0;
     }
     

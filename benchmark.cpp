@@ -12,9 +12,19 @@ struct BenchmarkPosition {
     std::string fen;
 };
 
-void benchmark() {
+void benchmark(int argc, char* argv[]) {
     ChessAI ai;
     ai.timeLimitMs = 1000000; // Disable time limit for benchmark testing
+    
+    // Parse ablation flags
+    for (int i = 2; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (arg == "-no-null") ai.enableNullMove = false;
+        if (arg == "-no-lmr") ai.enableLMR = false;
+        if (arg == "-no-killer") ai.enableKiller = false;
+        if (arg == "-no-history") ai.enableHistory = false;
+    }
+
     
     std::vector<BenchmarkPosition> positions = {
         {"Start Position", "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"},

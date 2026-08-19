@@ -25,15 +25,17 @@ int ChessAI::scoreMove(const Move& move, const Move& ttMove, const Board& board,
     }
 
     if (ply < 100) {
-        if (isSameMove(move, killerMoves[ply][0])) return 800000;
-        if (isSameMove(move, killerMoves[ply][1])) return 700000;
+        if (enableKiller && isSameMove(move, killerMoves[ply][0])) return 800000;
+        if (enableKiller && isSameMove(move, killerMoves[ply][1])) return 700000;
     }
-
-    return historyMoves[currentTurn][move.fromX * 8 + move.fromY][move.toX * 8 + move.toY];
+    
+    if (enableHistory) return historyMoves[currentTurn][move.fromX * 8 + move.fromY][move.toX * 8 + move.toY];
+    return 0;
 }
 
 Move ChessAI::getBestMove(Board& board, Color aiColor, int maxDepth) {
     nodesExplored = 0;
+    stats.clear();
     timeOut = false;
     startTime = std::chrono::steady_clock::now();
     for(int i=0; i<100; i++) {
@@ -98,7 +100,11 @@ Move ChessAI::getBestMove(Board& board, Color aiColor, int maxDepth) {
                   << " nodes " << nodesExplored
                   << " time " << ms
                   << " nps " << (nodesExplored * 1000 / ms)
-                  << std::endl;
+                  << " tthits " << stats.ttHits
+                  << " lmr " << stats.lmrReductions
+                  << " pvs " << stats.pvsResearches
+                  << " null " << stats.nullCutoffs
+                  << " qnodes " << stats.qNodes << std::endl;
     }
     
     return bestMove;
@@ -123,6 +129,7 @@ int ChessAI::negamax(Board& board, int depth, int ply, int alpha, int beta, Colo
     Move ttMove(0,0,0,0);
     
     if (tt.probe(hashKey, depth, alpha, beta, ttScore, ttMove)) {
+        stats.ttHits++;
         if (ttScore > 9000) ttScore -= ply;
         else if (ttScore < -9000) ttScore += ply;
         return ttScore;
@@ -140,7 +147,7 @@ int ChessAI::negamax(Board& board, int depth, int ply, int alpha, int beta, Colo
     
     // Null Move Pruning: if we can pass our turn and still get a beta cutoff,
     // the position is so good we can prune it.
-    if (allowNull && depth >= 3 && !inCheck) {
+    if (enableNullMove && allowNull && depth >= 3 && !inCheck) {
         // Make null move: just flip side to move via Zobrist
         GameState prevState = board.gameState;
         board.gameState.zobristKey ^= Zobrist::sideKey;
@@ -157,6 +164,7 @@ int ChessAI::negamax(Board& board, int depth, int ply, int alpha, int beta, Colo
         
         if (timeOut) return 0;
         if (nullScore >= beta) {
+            stats.nullCutoffs++;
             return beta;
         }
     }
@@ -202,9 +210,10 @@ int ChessAI::negamax(Board& board, int depth, int ply, int alpha, int beta, Colo
         // Late Move Reductions: moves ordered late are unlikely to be best,
         // so search them at reduced depth first
         bool isCapture = (captured.type != EMPTY);
+        bool isTactical = isCapture || move.promotion != EMPTY;
         bool givesCheck = board.isInCheck(currentTurn == WHITE ? BLACK : WHITE);
         int reduction = 0;
-        if (moveCount > 3 && depth >= 3 && !inCheck && !isCapture && !givesCheck && move.promotion == EMPTY) {
+        if (enableLMR && depth >= 3 && !inCheck && !isTactical && !givesCheck && moveCount > 4) {
             reduction = 1;
             if (moveCount > 6) reduction = 2;
         }
@@ -213,9 +222,11 @@ int ChessAI::negamax(Board& board, int depth, int ply, int alpha, int beta, Colo
             eval = -negamax(board, nextDepth, ply + 1, -beta, -alpha, currentTurn == WHITE ? BLACK : WHITE, true);
         } else {
             // Try reduced depth first (LMR)
+            stats.lmrReductions++;
             eval = -negamax(board, nextDepth - reduction, ply + 1, -alpha - 1, -alpha, currentTurn == WHITE ? BLACK : WHITE, true);
             // Re-search at full depth if it looks promising
             if (eval > alpha && (reduction > 0 || eval < beta)) {
+                stats.pvsResearches++;
                 eval = -negamax(board, nextDepth, ply + 1, -beta, -alpha, currentTurn == WHITE ? BLACK : WHITE, true);
             }
         }
@@ -266,6 +277,7 @@ int ChessAI::quiescence(Board& board, int alpha, int beta, Color currentTurn) {
     
     if (timeOut) return 0;
     nodesExplored++;
+    stats.qNodes++;
 
     bool inCheck = board.isInCheck(currentTurn);
     int standPat = -10000;
