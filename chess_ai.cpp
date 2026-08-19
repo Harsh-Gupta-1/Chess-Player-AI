@@ -169,14 +169,7 @@ int ChessAI::negamax(Board& board, int depth, int ply, int alpha, int beta, Colo
         }
     }
     
-    std::vector<Move> moves = board.generateLegalMoves(currentTurn);
-    
-    if (moves.empty()) {
-        if (inCheck) {
-            return -10000 + ply; // Checkmate
-        }
-        return 0; // Stalemate
-    }
+    std::vector<Move> moves = board.generateMoves(currentTurn);
     
     if (board.isDraw()) {
         return 0;
@@ -194,6 +187,7 @@ int ChessAI::negamax(Board& board, int depth, int ply, int alpha, int beta, Colo
     int maxEval = std::numeric_limits<int>::min() + 1;
     Move bestMoveForTT(0,0,0,0);
     int moveCount = 0;
+    int legalMovesCount = 0;
     
     for (const auto& pair : scoredMoves) {
         const Move& move = pair.second;
@@ -201,6 +195,12 @@ int ChessAI::negamax(Board& board, int depth, int ply, int alpha, int beta, Colo
         Piece captured = board.getPiece(move.toX, move.toY);
         board.makeMove(move);
         
+        if (board.isInCheck(currentTurn)) {
+            board.undoMove(move, captured, prevState);
+            continue;
+        }
+        
+        legalMovesCount++;
         int extension = (inCheck) ? 1 : 0;
         int nextDepth = depth - 1 + extension;
         int eval;
@@ -253,6 +253,10 @@ int ChessAI::negamax(Board& board, int depth, int ply, int alpha, int beta, Colo
         }
     }
     
+    if (legalMovesCount == 0 && inCheck) {
+        return -10000 + ply;
+    }
+    
     Bound bound = EXACT;
     if (maxEval <= originalAlpha) bound = UPPER_BOUND;
     else if (maxEval >= beta) bound = LOWER_BOUND;
@@ -289,11 +293,7 @@ int ChessAI::quiescence(Board& board, int alpha, int beta, Color currentTurn) {
         if (alpha < standPat) alpha = standPat;
     }
 
-    std::vector<Move> allMoves = board.generateLegalMoves(currentTurn);
-    if (allMoves.empty()) {
-        if (inCheck) return -10000; // Checkmate
-        return 0; // Stalemate
-    }
+    std::vector<Move> allMoves = board.generateMoves(currentTurn);
     
     std::vector<std::pair<int, Move>> scoredMoves;
     
@@ -309,12 +309,20 @@ int ChessAI::quiescence(Board& board, int alpha, int beta, Color currentTurn) {
         return a.first > b.first;
     });
 
+    int legalMovesCount = 0;
+
     for (const auto& pair : scoredMoves) {
         const Move& move = pair.second;
         GameState prevState = board.gameState;
         Piece captured = board.getPiece(move.toX, move.toY);
         board.makeMove(move);
         
+        if (board.isInCheck(currentTurn)) {
+            board.undoMove(move, captured, prevState);
+            continue;
+        }
+        
+        legalMovesCount++;
         int score = -quiescence(board, -beta, -alpha, currentTurn == WHITE ? BLACK : WHITE);
         
         board.undoMove(move, captured, prevState);
@@ -323,6 +331,10 @@ int ChessAI::quiescence(Board& board, int alpha, int beta, Color currentTurn) {
         
         if (score >= beta) return beta;
         if (score > alpha) alpha = score;
+    }
+    
+    if (legalMovesCount == 0 && inCheck) {
+        return -10000;
     }
     
     return alpha;

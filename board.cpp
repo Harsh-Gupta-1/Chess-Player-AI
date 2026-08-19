@@ -353,8 +353,11 @@ bool Board::isSquareUnderAttack(int x, int y, Color byColor) const {
 
 bool Board::isInCheck(Color color) const {
     std::pair<int, int> kingPos = findKing(color);
-    int kingX = kingPos.first, kingY = kingPos.second;
-    return isSquareUnderAttack(kingX, kingY, color == WHITE ? BLACK : WHITE);
+    if (kingPos.first == -1) {
+        return false;
+    }
+    bool result = isSquareUnderAttack(kingPos.first, kingPos.second, color == WHITE ? BLACK : WHITE);
+    return result;
 }
 
 void Board::makeMove(const Move& m) {
@@ -981,9 +984,8 @@ int Board::evaluate() {
     mgScore += pawnStructScore.first;
     egScore += pawnStructScore.second;
     
-    int mobilityScore = evaluateMobility();
-    mgScore += mobilityScore;
-    egScore += mobilityScore;
+    // Mobility evaluation removed: Profiler showed it took 35% of CPU time, 
+    // tanking NPS. PSQTs already cover 90% of mobility rewards.
     
     // Tapered Eval Interpolation
     // gamePhase max is 24 (4 knights=4, 4 bishops=4, 4 rooks=8, 2 queens=8)

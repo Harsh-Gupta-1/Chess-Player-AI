@@ -71,7 +71,7 @@ void benchmark(int argc, char* argv[]) {
     std::cout << std::string(65, '-') << std::endl;
     std::cout << std::left << std::setw(20) << "TOTAL"
               << std::setw(15) << totalNodes
-              << std::setw(15) << totalTime
-              << std::setw(15) << static_cast<long long>(totalNodes / totalTime) << " (Avg NPS)" << std::endl;
-    std::cout << "---------------------------------" << std::endl;
+              << std::setw(15) << std::fixed << std::setprecision(4) << totalTime
+              << std::setw(15) << static_cast<long long>(totalNodes / totalTime) << "  (Avg NPS)" << std::endl;
+    std::cout << std::string(33, '-') << std::endl;
 }
