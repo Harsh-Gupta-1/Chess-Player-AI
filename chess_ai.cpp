@@ -36,7 +36,7 @@ int ChessAI::scoreMove(const Move& move, const Move& ttMove, const Board& board,
 Move ChessAI::getBestMove(Board& board, Color aiColor, int maxDepth) {
     nodesExplored = 0;
     stats.clear();
-    timeOut = false;
+    stopSearch = false;
     startTime = std::chrono::steady_clock::now();
     for(int i=0; i<100; i++) {
         killerMoves[i][0] = Move(0,0,0,0);
@@ -84,8 +84,8 @@ Move ChessAI::getBestMove(Board& board, Color aiColor, int maxDepth) {
             
             board.undoMove(move, captured, prevState);
 
-            if (timeOut) break;
-
+            if (stopSearch) break;
+            
             if (score > bestScore) {
                 bestScore = score;
                 currentBestMove = move;
@@ -93,7 +93,7 @@ Move ChessAI::getBestMove(Board& board, Color aiColor, int maxDepth) {
             alpha = std::max(alpha, score);
         }
         
-        if (timeOut && depth > 1) break; // Keep best move from previous depth if timed out
+        if (stopSearch && depth > 1) break; // Keep best move from previous depth if timed out
         
         bestMove = currentBestMove;
         
@@ -121,11 +121,11 @@ int ChessAI::negamax(Board& board, int depth, int ply, int alpha, int beta, Colo
     if ((nodesExplored & 2047) == 0) {
         auto now = std::chrono::steady_clock::now();
         if (std::chrono::duration_cast<std::chrono::milliseconds>(now - startTime).count() >= timeLimitMs) {
-            timeOut = true;
+            stopSearch = true;
         }
     }
     
-    if (timeOut) return 0;
+    if (stopSearch) return 0;
     
     nodesExplored++;
     
@@ -170,7 +170,7 @@ int ChessAI::negamax(Board& board, int depth, int ply, int alpha, int beta, Colo
         
         board.gameState = prevState; // Undo null move
         
-        if (timeOut) return 0;
+        if (stopSearch) return 0;
         if (nullScore >= beta) {
             stats.nullCutoffs++;
             return beta;
@@ -239,7 +239,7 @@ int ChessAI::negamax(Board& board, int depth, int ply, int alpha, int beta, Colo
         
         board.undoMove(move, captured, prevState);
         
-        if (timeOut) return 0;
+        if (stopSearch) return 0;
         
         if (eval > maxEval) {
             maxEval = eval;
@@ -268,7 +268,7 @@ int ChessAI::negamax(Board& board, int depth, int ply, int alpha, int beta, Colo
     if (maxEval <= originalAlpha) bound = UPPER_BOUND;
     else if (maxEval >= beta) bound = LOWER_BOUND;
     
-    if (!timeOut) {
+    if (!stopSearch) {
         tt.store(hashKey, depth, ply, maxEval, bound, bestMoveForTT);
     }
     
@@ -277,13 +277,13 @@ int ChessAI::negamax(Board& board, int depth, int ply, int alpha, int beta, Colo
 
 int ChessAI::quiescence(Board& board, int ply, int alpha, int beta, Color currentTurn) {
     if ((nodesExplored & 2047) == 0) {
-        auto now = std::chrono::steady_clock::now();
-        if (std::chrono::duration_cast<std::chrono::milliseconds>(now - startTime).count() >= timeLimitMs) {
-            timeOut = true;
+        auto autoNow = std::chrono::steady_clock::now();
+        if (std::chrono::duration_cast<std::chrono::milliseconds>(autoNow - startTime).count() >= timeLimitMs) {
+            stopSearch = true;
         }
     }
     
-    if (timeOut) return 0;
+    if (stopSearch) return 0;
     nodesExplored++;
     stats.qNodes++;
 
@@ -331,7 +331,7 @@ int ChessAI::quiescence(Board& board, int ply, int alpha, int beta, Color curren
         
         board.undoMove(move, captured, prevState);
         
-        if (timeOut) return 0;
+        if (stopSearch) return 0;
         
         if (score >= beta) return beta;
         if (score > alpha) alpha = score;

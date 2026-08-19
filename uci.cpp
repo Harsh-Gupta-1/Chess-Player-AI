@@ -2,6 +2,8 @@
 #include <iostream>
 #include <sstream>
 #include <vector>
+#include <thread>
+#include <atomic>
 
 std::string UCI::moveToString(const Move& m) {
     std::string s = "";
@@ -34,6 +36,8 @@ void UCI::loop() {
     ChessAI ai;
     Color turn = WHITE;
     
+    std::thread searchThread;
+    
     std::setvbuf(stdin, NULL, _IONBF, 0);
     std::setvbuf(stdout, NULL, _IONBF, 0);
     
@@ -51,9 +55,14 @@ void UCI::loop() {
             std::cout << "readyok" << std::endl;
         }
         else if (command == "ucinewgame") {
+            ai.stopSearch = true;
+            if (searchThread.joinable()) searchThread.join();
             ai.tt.clear();
         }
         else if (command == "position") {
+            ai.stopSearch = true;
+            if (searchThread.joinable()) searchThread.join();
+            
             std::string arg;
             iss >> arg;
             if (arg == "startpos") {
@@ -73,14 +82,25 @@ void UCI::loop() {
                 std::string moveStr;
                 while (iss >> moveStr) {
                     Move m = parseMove(board, turn, moveStr);
+                    // Abort parsing if move is invalid to prevent board corruption
+                    if (m.fromX == 0 && m.fromY == 0 && m.toX == 0 && m.toY == 0 && m.promotion == EMPTY) break;
                     board.makeMove(m);
                     turn = (turn == WHITE) ? BLACK : WHITE;
                 }
             }
         }
+        else if (command == "stop") {
+            ai.stopSearch = true;
+            if (searchThread.joinable()) searchThread.join();
+        }
         else if (command == "go") {
+            ai.stopSearch = true;
+            if (searchThread.joinable()) searchThread.join();
+            ai.stopSearch = false;
+            
             int depth = 4; // Default to 4 if absolutely no args are provided
             bool useTime = false;
+            bool infinite = false;
             long long timeRemaining = 0;
             long long increment = 0;
             long long exactMovetime = 0;
@@ -89,6 +109,7 @@ void UCI::loop() {
             std::string arg;
             while (iss >> arg) {
                 if (arg == "depth") { iss >> depth; }
+                else if (arg == "infinite") { infinite = true; }
                 else if (arg == "movetime") { iss >> exactMovetime; useExactMovetime = true; useTime = true; }
                 else if (arg == "wtime" && turn == WHITE) { iss >> timeRemaining; useTime = true; }
                 else if (arg == "btime" && turn == BLACK) { iss >> timeRemaining; useTime = true; }
@@ -100,7 +121,10 @@ void UCI::loop() {
                 }
             }
             
-            if (useTime) {
+            if (infinite) {
+                ai.timeLimitMs = 1000000000; // Large arbitrary limit
+                depth = 64;
+            } else if (useTime) {
                 long long allocatedTime;
                 if (useExactMovetime) {
                     allocatedTime = exactMovetime;
@@ -121,13 +145,21 @@ void UCI::loop() {
                     depth = 64; 
                 }
             } else {
-                ai.timeLimitMs = 1000000; // Practically infinite if no time limit
+                ai.timeLimitMs = 1000000000; // Practically infinite if no time limit
             }
             
-            Move best = ai.getBestMove(board, turn, depth);
-            std::cout << "bestmove " << moveToString(best) << std::endl;
+            // Pass copies to thread so main thread parsing doesn't interfere
+            Board threadBoard = board;
+            Color threadTurn = turn;
+            
+            searchThread = std::thread([&ai, threadBoard, threadTurn, depth]() mutable {
+                Move best = ai.getBestMove(threadBoard, threadTurn, depth);
+                std::cout << "bestmove " << UCI::moveToString(best) << std::endl;
+            });
         }
         else if (command == "quit") {
+            ai.stopSearch = true;
+            if (searchThread.joinable()) searchThread.join();
             break;
         }
     }

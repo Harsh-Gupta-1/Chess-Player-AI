@@ -7,6 +7,7 @@
 #include <limits>
 #include <chrono>
 #include <cstring>
+#include <atomic>
 
 class ChessAI {
 public:
@@ -16,7 +17,7 @@ public:
     // Time management
     std::chrono::time_point<std::chrono::steady_clock> startTime;
     long long timeLimitMs = 1000;
-    bool timeOut = false;
+    std::atomic<bool> stopSearch{false};
     
     // Telemetry
     struct SearchStats {

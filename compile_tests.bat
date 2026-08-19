@@ -37,3 +37,13 @@ if %ERRORLEVEL% equ 0 (
 ) else (
     echo Compilation failed.
 )
+
+echo.
+echo Compiling UCI Robustness Tests...
+g++ -std=c++11 -O3 -march=native -flto -Wall -Wextra test_uci.cpp board.cpp chess_ai.cpp game.cpp zobrist.cpp transposition_table.cpp uci.cpp -o test_uci.exe
+if %ERRORLEVEL% equ 0 (
+    echo Compilation successful. Running UCI Tests...
+    .\test_uci.exe
+) else (
+    echo Compilation failed.
+)
