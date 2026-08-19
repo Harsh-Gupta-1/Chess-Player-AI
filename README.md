@@ -11,6 +11,7 @@ A simple command-line chess AI implemented in C++ using the minimax algorithm wi
 - **Move Ordering**: Implements MVV-LVA (Most Valuable Victim - Least Valuable Attacker), Killer Heuristic, and History Heuristic to achieve 30x node reduction.
 - **Quiescence Search**: Eliminates the "Horizon Effect" by continuing to search all tactical captures at the end of the main search depth until a "quiet" position is reached.
 - **Selective Extensions**: Automatically extends the search depth when a king is in check, ensuring forced mate sequences are not overlooked.
+- **UCI Protocol Support**: The engine is fully compatible with the Universal Chess Interface protocol, allowing it to be plugged into standard GUIs like Arena, CuteChess, and Lichess.
 - **Time Management**: The engine can now be constrained to search within a specific time limit (e.g., 1000ms).
 - **Board Evaluation**: Evaluates positions based on material, piece-square tables, mobility, and pawn structure.
 - **Move Generation**: Supports all legal chess moves, including castling, en passant, and promotions.
@@ -68,12 +69,17 @@ A simple command-line chess AI implemented in C++ using the minimax algorithm wi
 
 You can run the engine in different modes using command-line arguments:
 
-1. **PERFT Suite** (tests move generation correctness):
+1. **UCI Mode** (for plugging into Arena/CuteChess GUIs):
+   ```bash
+   ./chess uci
+   ```
+
+2. **PERFT Suite** (tests move generation correctness):
    ```bash
    ./chess perft
    ```
 
-2. **Benchmark Suite** (tests search speed and efficiency):
+3. **Benchmark Suite** (tests search speed and efficiency):
    ```bash
    ./chess bench
    ```

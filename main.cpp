@@ -1,6 +1,7 @@
 #include "game.h"
 #include "benchmark.h"
 #include "perft.h"
+#include "uci.h"
 #include <iostream>
 #include <string>
 
@@ -12,6 +13,11 @@ int main(int argc, char* argv[]) {
 
     if (argc > 1 && std::string(argv[1]) == "bench") {
         benchmark();
+        return 0;
+    }
+    
+    if (argc > 1 && std::string(argv[1]) == "uci") {
+        UCI::loop();
         return 0;
     }
     
