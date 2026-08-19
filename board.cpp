@@ -1,4 +1,5 @@
 #include "board.h"
+#include "zobrist.h"
 #include <iostream>
 
 const int Board::PAWN_TABLE[8][8] = {
@@ -65,6 +66,7 @@ void Board::setupBoard() {
     board[7][3] = Piece(QUEEN, BLACK);
     board[0][4] = Piece(KING, WHITE);
     board[7][4] = Piece(KING, BLACK);
+    gameState.zobristKey = Zobrist::computeHash(*this, WHITE);
 }
 
 Color Board::loadFEN(const std::string& fen) {
@@ -142,6 +144,7 @@ Color Board::loadFEN(const std::string& fen) {
         gameState.hasEnPassant = true;
     }
     
+    gameState.zobristKey = Zobrist::computeHash(*this, activeColor);
     return activeColor;
 }
 
@@ -244,15 +247,41 @@ bool Board::isInCheck(Color color) const {
 void Board::makeMove(const Move& m) {
     Piece movingPiece = board[m.fromX][m.fromY];
     
+    int oldCastle = 0;
+    if (gameState.whiteCanCastleKingside) oldCastle |= 1;
+    if (gameState.whiteCanCastleQueenside) oldCastle |= 2;
+    if (gameState.blackCanCastleKingside) oldCastle |= 4;
+    if (gameState.blackCanCastleQueenside) oldCastle |= 8;
+    gameState.zobristKey ^= Zobrist::castleKeys[oldCastle];
+    
+    if (gameState.hasEnPassant) {
+        gameState.zobristKey ^= Zobrist::enPassantKeys[gameState.enPassantY];
+    }
+    
+    gameState.zobristKey ^= Zobrist::pieceKeys[movingPiece.color][movingPiece.type][m.fromX * 8 + m.fromY];
+    
     if (m.isEnPassant) {
+        Piece capturedPawn = board[m.fromX][m.toY];
+        gameState.zobristKey ^= Zobrist::pieceKeys[capturedPawn.color][capturedPawn.type][m.fromX * 8 + m.toY];
         board[m.fromX][m.toY] = Piece();
+    } else {
+        Piece captured = board[m.toX][m.toY];
+        if (captured.type != EMPTY) {
+            gameState.zobristKey ^= Zobrist::pieceKeys[captured.color][captured.type][m.toX * 8 + m.toY];
+        }
     }
     
     if (m.isCastle) {
         if (m.toY == 6) {
+            Piece rook = board[m.fromX][7];
+            gameState.zobristKey ^= Zobrist::pieceKeys[rook.color][rook.type][m.fromX * 8 + 7];
+            gameState.zobristKey ^= Zobrist::pieceKeys[rook.color][rook.type][m.fromX * 8 + 5];
             board[m.fromX][5] = board[m.fromX][7];
             board[m.fromX][7] = Piece();
         } else if (m.toY == 2) {
+            Piece rook = board[m.fromX][0];
+            gameState.zobristKey ^= Zobrist::pieceKeys[rook.color][rook.type][m.fromX * 8 + 0];
+            gameState.zobristKey ^= Zobrist::pieceKeys[rook.color][rook.type][m.fromX * 8 + 3];
             board[m.fromX][3] = board[m.fromX][0];
             board[m.fromX][0] = Piece();
         }
@@ -261,11 +290,28 @@ void Board::makeMove(const Move& m) {
     board[m.toX][m.toY] = movingPiece;
     board[m.fromX][m.fromY] = Piece();
     
+    Piece placedPiece = movingPiece;
     if (m.promotion != EMPTY) {
-        board[m.toX][m.toY] = Piece(m.promotion, movingPiece.color);
+        placedPiece = Piece(m.promotion, movingPiece.color);
+        board[m.toX][m.toY] = placedPiece;
     }
     
+    gameState.zobristKey ^= Zobrist::pieceKeys[placedPiece.color][placedPiece.type][m.toX * 8 + m.toY];
+    
     updateGameState(m, movingPiece);
+    
+    int newCastle = 0;
+    if (gameState.whiteCanCastleKingside) newCastle |= 1;
+    if (gameState.whiteCanCastleQueenside) newCastle |= 2;
+    if (gameState.blackCanCastleKingside) newCastle |= 4;
+    if (gameState.blackCanCastleQueenside) newCastle |= 8;
+    gameState.zobristKey ^= Zobrist::castleKeys[newCastle];
+    
+    if (gameState.hasEnPassant) {
+        gameState.zobristKey ^= Zobrist::enPassantKeys[gameState.enPassantY];
+    }
+    
+    gameState.zobristKey ^= Zobrist::sideKey;
 }
 
 void Board::undoMove(const Move& m, const Piece& captured, const GameState& prevState) {

@@ -103,7 +103,7 @@ int ChessAI::negamax(Board& board, int depth, int ply, int alpha, int beta, Colo
     nodesExplored++;
     
     int originalAlpha = alpha;
-    unsigned long long hashKey = Zobrist::computeHash(board, currentTurn);
+    unsigned long long hashKey = board.gameState.zobristKey;
     int ttScore;
     Move ttMove(0,0,0,0);
     

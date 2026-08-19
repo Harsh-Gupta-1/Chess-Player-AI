@@ -12,6 +12,7 @@ A simple command-line chess AI implemented in C++ using the minimax algorithm wi
 - **Quiescence Search**: Eliminates the "Horizon Effect" by continuing to search all tactical captures at the end of the main search depth until a "quiet" position is reached.
 - **Selective Extensions**: Automatically extends the search depth when a king is in check, ensuring forced mate sequences are not overlooked.
 - **UCI Protocol Support**: The engine is fully compatible with the Universal Chess Interface protocol, allowing it to be plugged into standard GUIs like Arena, CuteChess, and Lichess.
+- **Incremental Zobrist Hashing**: State keys are XOR'd incrementally during `makeMove` and `undoMove`, eliminating the need to re-scan the 64-square board at every search node.
 - **Time Management**: The engine can now be constrained to search within a specific time limit (e.g., 1000ms).
 - **Board Evaluation**: Evaluates positions based on material, piece-square tables, mobility, and pawn structure.
 - **Move Generation**: Supports all legal chess moves, including castling, en passant, and promotions.
