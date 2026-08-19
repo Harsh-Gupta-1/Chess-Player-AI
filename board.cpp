@@ -1,9 +1,11 @@
 #include "board.h"
-#include "zobrist.h"
 #include <iostream>
+#include <vector>
+#include <sstream>
+#include "zobrist.h"
 
-const int Board::MG_VALUE[6] = { 0, 82, 337, 365, 477, 1025 };
-const int Board::EG_VALUE[6] = { 0, 94, 281, 297, 512,  936 };
+const int Board::MG_VALUE[7] = { 0, 82, 337, 365, 477, 1025, 0 };
+const int Board::EG_VALUE[7] = { 0, 94, 281, 297, 512, 936, 0 };
 
 const int Board::PAWN_MG[8][8] = {
     {  0,   0,   0,   0,   0,   0,   0,   0},
@@ -137,300 +139,369 @@ const int Board::KING_EG[8][8] = {
     {-53, -34, -21, -11, -28, -14, -24, -43}
 };
 
+namespace Attacks {
+    Bitboard knightAttacks[64];
+    Bitboard kingAttacks[64];
+    Bitboard pawnAttacks[2][64];
+    Bitboard rayAttacks[8][64]; // N, S, E, W, NE, NW, SE, SW
+
+    void init() {
+        for (int sq = 0; sq < 64; ++sq) {
+            int r = sq / 8;
+            int f = sq % 8;
+            
+            // Knight attacks
+            Bitboard n = 0;
+            if (r >= 2 && f >= 1) n |= (1ULL << (sq - 17));
+            if (r >= 2 && f <= 6) n |= (1ULL << (sq - 15));
+            if (r >= 1 && f >= 2) n |= (1ULL << (sq - 10));
+            if (r >= 1 && f <= 5) n |= (1ULL << (sq - 6));
+            if (r <= 6 && f >= 2) n |= (1ULL << (sq + 6));
+            if (r <= 6 && f <= 5) n |= (1ULL << (sq + 10));
+            if (r <= 5 && f >= 1) n |= (1ULL << (sq + 15));
+            if (r <= 5 && f <= 6) n |= (1ULL << (sq + 17));
+            knightAttacks[sq] = n;
+            
+            // King attacks
+            Bitboard k = 0;
+            if (r >= 1) k |= (1ULL << (sq - 8));
+            if (r <= 6) k |= (1ULL << (sq + 8));
+            if (f >= 1) k |= (1ULL << (sq - 1));
+            if (f <= 6) k |= (1ULL << (sq + 1));
+            if (r >= 1 && f >= 1) k |= (1ULL << (sq - 9));
+            if (r >= 1 && f <= 6) k |= (1ULL << (sq - 7));
+            if (r <= 6 && f >= 1) k |= (1ULL << (sq + 7));
+            if (r <= 6 && f <= 6) k |= (1ULL << (sq + 9));
+            kingAttacks[sq] = k;
+            
+            // Pawn attacks
+            Bitboard pw = 0;
+            if (r <= 6 && f >= 1) pw |= (1ULL << (sq + 7));
+            if (r <= 6 && f <= 6) pw |= (1ULL << (sq + 9));
+            pawnAttacks[WHITE][sq] = pw;
+            
+            Bitboard pb = 0;
+            if (r >= 1 && f >= 1) pb |= (1ULL << (sq - 9));
+            if (r >= 1 && f <= 6) pb |= (1ULL << (sq - 7));
+            pawnAttacks[BLACK][sq] = pb;
+            
+            // Rays
+            Bitboard ray = 0;
+            for (int i=r+1; i<8; ++i) ray |= (1ULL << (i*8 + f)); rayAttacks[0][sq] = ray; // N
+            ray = 0;
+            for (int i=r-1; i>=0; --i) ray |= (1ULL << (i*8 + f)); rayAttacks[1][sq] = ray; // S
+            ray = 0;
+            for (int i=f+1; i<8; ++i) ray |= (1ULL << (r*8 + i)); rayAttacks[2][sq] = ray; // E
+            ray = 0;
+            for (int i=f-1; i>=0; --i) ray |= (1ULL << (r*8 + i)); rayAttacks[3][sq] = ray; // W
+            ray = 0;
+            for (int i=r+1, j=f+1; i<8 && j<8; ++i, ++j) ray |= (1ULL << (i*8 + j)); rayAttacks[4][sq] = ray; // NE
+            ray = 0;
+            for (int i=r+1, j=f-1; i<8 && j>=0; ++i, --j) ray |= (1ULL << (i*8 + j)); rayAttacks[5][sq] = ray; // NW
+            ray = 0;
+            for (int i=r-1, j=f+1; i>=0 && j<8; --i, ++j) ray |= (1ULL << (i*8 + j)); rayAttacks[6][sq] = ray; // SE
+            ray = 0;
+            for (int i=r-1, j=f-1; i>=0 && j>=0; --i, --j) ray |= (1ULL << (i*8 + j)); rayAttacks[7][sq] = ray; // SW
+        }
+    }
+    
+    Bitboard getRayAttacks(int sq, int dir, Bitboard occupied) {
+        Bitboard attacks = rayAttacks[dir][sq];
+        Bitboard blockers = attacks & occupied;
+        if (blockers) {
+            int blockerSq = (dir == 0 || dir == 4 || dir == 5 || dir == 2) ? __builtin_ctzll(blockers) : 63 - __builtin_clzll(blockers);
+            attacks ^= rayAttacks[dir][blockerSq];
+        }
+        return attacks;
+    }
+    
+    Bitboard getBishopAttacks(int sq, Bitboard occupied) {
+        return getRayAttacks(sq, 4, occupied) | getRayAttacks(sq, 5, occupied) | getRayAttacks(sq, 6, occupied) | getRayAttacks(sq, 7, occupied);
+    }
+    
+    Bitboard getRookAttacks(int sq, Bitboard occupied) {
+        return getRayAttacks(sq, 0, occupied) | getRayAttacks(sq, 1, occupied) | getRayAttacks(sq, 2, occupied) | getRayAttacks(sq, 3, occupied);
+    }
+    
+    Bitboard getQueenAttacks(int sq, Bitboard occupied) {
+        return getRookAttacks(sq, occupied) | getBishopAttacks(sq, occupied);
+    }
+}
+
 Board::Board() {
-    board = std::vector<std::vector<Piece>>(8, std::vector<Piece>(8, Piece()));
+    Attacks::init();
     setupBoard();
 }
 
 void Board::setupBoard() {
-    for (int i = 0; i < 8; ++i) {
-        for (int j = 0; j < 8; ++j) {
-            board[i][j] = Piece();
-        }
-    }
-
-    for (int i = 0; i < 8; ++i) {
-        board[1][i] = Piece(PAWN, WHITE);
-        board[6][i] = Piece(PAWN, BLACK);
-    }
-    board[0][0] = board[0][7] = Piece(ROOK, WHITE);
-    board[7][0] = board[7][7] = Piece(ROOK, BLACK);
-    board[0][1] = board[0][6] = Piece(KNIGHT, WHITE);
-    board[7][1] = board[7][6] = Piece(KNIGHT, BLACK);
-    board[0][2] = board[0][5] = Piece(BISHOP, WHITE);
-    board[7][2] = board[7][5] = Piece(BISHOP, BLACK);
-    board[0][3] = Piece(QUEEN, WHITE);
-    board[7][3] = Piece(QUEEN, BLACK);
-    board[0][4] = Piece(KING, WHITE);
-    board[7][4] = Piece(KING, BLACK);
-    
-    gameState.whiteCanCastleKingside = true;
-    gameState.whiteCanCastleQueenside = true;
-    gameState.blackCanCastleKingside = true;
-    gameState.blackCanCastleQueenside = true;
-    gameState.hasEnPassant = false;
-    gameState.enPassantX = -1;
-    gameState.enPassantY = -1;
-    
+    for(int i=0; i<7; ++i) pieces[i] = 0;
+    colors[WHITE] = 0;
+    colors[BLACK] = 0;
+    loadFEN("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
     gameState.zobristKey = Zobrist::computeHash(*this, WHITE);
-    
-    initCache();
-    
-    historyPly = 0;
-    history[historyPly++] = gameState.zobristKey;
+}
+
+Piece Board::getPiece(int sq) const {
+    return pieceList[sq];
+}
+
+Piece Board::getPiece(int x, int y) const {
+    return getPiece(x * 8 + y);
 }
 
 Color Board::loadFEN(const std::string& fen) {
-    for (int i = 0; i < 8; ++i) {
-        for (int j = 0; j < 8; ++j) {
-            board[i][j] = Piece();
-        }
-    }
+    for(int i=0; i<7; ++i) pieces[i] = 0;
+    colors[WHITE] = 0;
+    colors[BLACK] = 0;
+    for(int i=0; i<64; ++i) pieceList[i] = Piece(EMPTY, WHITE);
+    gameState.mgScore = 0;
+    gameState.egScore = 0;
+    
+    std::istringstream iss(fen);
+    std::string boardFen, turn, castling, enPassant;
+    int halfmove = 0, fullmove = 1;
+    iss >> boardFen >> turn >> castling >> enPassant >> halfmove >> fullmove;
     
     int rank = 7, file = 0;
-    size_t i = 0;
-    
-    for (; i < fen.length() && fen[i] != ' '; ++i) {
-        char c = fen[i];
-        if (c == '/') {
-            rank--;
-            file = 0;
-        } else if (isdigit(c)) {
-            file += c - '0';
-        } else {
-            Color color = isupper(c) ? WHITE : BLACK;
-            PieceType type = EMPTY;
-            switch (tolower(c)) {
-                case 'p': type = PAWN; break;
-                case 'n': type = KNIGHT; break;
-                case 'b': type = BISHOP; break;
-                case 'r': type = ROOK; break;
-                case 'q': type = QUEEN; break;
-                case 'k': type = KING; break;
+    for (char c : boardFen) {
+        if (c == '/') { rank--; file = 0; }
+        else if (isdigit(c)) { file += (c - '0'); }
+        else {
+            Color col = islower(c) ? BLACK : WHITE;
+            PieceType t;
+            char l = tolower(c);
+            if (l == 'p') t = PAWN;
+            else if (l == 'n') t = KNIGHT;
+            else if (l == 'b') t = BISHOP;
+            else if (l == 'r') t = ROOK;
+            else if (l == 'q') t = QUEEN;
+            else t = KING;
+            
+            int sq = rank * 8 + file;
+            pieces[t] |= (1ULL << sq);
+            colors[col] |= (1ULL << sq);
+            pieceList[sq] = Piece(t, col);
+            int mgPsq = 0, egPsq = 0;
+            int pRank = (col == WHITE) ? 7 - rank : rank;
+            switch(t) {
+                case PAWN:   mgPsq = PAWN_MG[pRank][file]; egPsq = PAWN_EG[pRank][file]; break;
+                case KNIGHT: mgPsq = KNIGHT_MG[pRank][file]; egPsq = KNIGHT_EG[pRank][file]; break;
+                case BISHOP: mgPsq = BISHOP_MG[pRank][file]; egPsq = BISHOP_EG[pRank][file]; break;
+                case ROOK:   mgPsq = ROOK_MG[pRank][file]; egPsq = ROOK_EG[pRank][file]; break;
+                case QUEEN:  mgPsq = QUEEN_MG[pRank][file]; egPsq = QUEEN_EG[pRank][file]; break;
+                case KING:   mgPsq = KING_MG[pRank][file]; egPsq = KING_EG[pRank][file]; break;
+                default: break;
             }
-            if (isInBounds(rank, file)) {
-                board[rank][file] = Piece(type, color);
+            int mgVal = MG_VALUE[t] + mgPsq;
+            int egVal = EG_VALUE[t] + egPsq;
+            if (col == WHITE) {
+                gameState.mgScore += mgVal;
+                gameState.egScore += egVal;
+            } else {
+                gameState.mgScore -= mgVal;
+                gameState.egScore -= egVal;
             }
             file++;
         }
     }
     
-    i++;
-    Color activeColor = WHITE;
-    if (i < fen.length() && fen[i] == 'b') activeColor = BLACK;
-    if (i < fen.length()) {
-        while (i < fen.length() && fen[i] != ' ') i++;
-    }
-    i++;
+    int savedMgScore = gameState.mgScore;
+    int savedEgScore = gameState.egScore;
+    gameState = GameState();
+    gameState.mgScore = savedMgScore;
+    gameState.egScore = savedEgScore;
+    gameState.whiteCanCastleKingside = castling.find('K') != std::string::npos;
+    gameState.whiteCanCastleQueenside = castling.find('Q') != std::string::npos;
+    gameState.blackCanCastleKingside = castling.find('k') != std::string::npos;
+    gameState.blackCanCastleQueenside = castling.find('q') != std::string::npos;
     
-    gameState.whiteCanCastleKingside = false;
-    gameState.whiteCanCastleQueenside = false;
-    gameState.blackCanCastleKingside = false;
-    gameState.blackCanCastleQueenside = false;
-    
-    if (i < fen.length() && fen[i] != '-') {
-        while (i < fen.length() && fen[i] != ' ') {
-            switch (fen[i]) {
-                case 'K': gameState.whiteCanCastleKingside = true; break;
-                case 'Q': gameState.whiteCanCastleQueenside = true; break;
-                case 'k': gameState.blackCanCastleKingside = true; break;
-                case 'q': gameState.blackCanCastleQueenside = true; break;
-            }
-            i++;
-        }
-    } else {
-        if (i < fen.length()) i++;
-    }
-    i++;
-    
-    gameState.hasEnPassant = false;
-    gameState.enPassantX = -1;
-    gameState.enPassantY = -1;
-    
-    if (i < fen.length() && fen[i] != '-') {
-        char fileChar = fen[i++];
-        char rankChar = fen[i++];
-        gameState.enPassantY = fileChar - 'a';
-        gameState.enPassantX = rankChar - '1';
+    if (enPassant != "-") {
         gameState.hasEnPassant = true;
+        gameState.enPassantX = enPassant[1] - '1';
+        gameState.enPassantY = enPassant[0] - 'a';
     } else {
-        if (i < fen.length()) i++;
+        gameState.hasEnPassant = false;
     }
     
-    while (i < fen.length() && fen[i] == ' ') i++;
+    gameState.halfmoveClock = halfmove;
+    gameState.fullmoveNumber = fullmove;
     
-    gameState.halfmoveClock = 0;
-    if (i < fen.length()) {
-        std::string halfmoveStr = "";
-        while (i < fen.length() && fen[i] != ' ') {
-            halfmoveStr += fen[i++];
-        }
-        if (!halfmoveStr.empty()) gameState.halfmoveClock = std::stoi(halfmoveStr);
-    }
-    
-    while (i < fen.length() && fen[i] == ' ') i++;
-    
-    gameState.fullmoveNumber = 1;
-    if (i < fen.length()) {
-        std::string fullmoveStr = "";
-        while (i < fen.length() && fen[i] != ' ') {
-            fullmoveStr += fen[i++];
-        }
-        if (!fullmoveStr.empty()) gameState.fullmoveNumber = std::stoi(fullmoveStr);
-    }
-    
-    gameState.zobristKey = Zobrist::computeHash(*this, activeColor);
     initCache();
-    historyPly = 0;
-    history[historyPly++] = gameState.zobristKey;
-    
-    return activeColor;
+    Color c_turn = turn == "w" ? WHITE : BLACK;
+    gameState.zobristKey = Zobrist::computeHash(*this, c_turn);
+    return c_turn;
 }
 
 void Board::initCache() {
-    kingPos[WHITE] = {-1, -1};
-    kingPos[BLACK] = {-1, -1};
-    for (int c = 0; c < 2; c++) {
-        for (int t = 0; t < 6; t++) {
-            pieceCount[c][t] = 0;
+    for(int c=0; c<2; ++c) {
+        for(int t=0; t<7; ++t) {
+            pieceCount[c][t] = __builtin_popcountll(pieces[t] & colors[c]);
+        }
+        kingPos[c].first = -1;
+        kingPos[c].second = -1;
+        if (pieces[KING] & colors[c]) {
+            int sq = __builtin_ctzll(pieces[KING] & colors[c]);
+            kingPos[c] = {sq / 8, sq % 8};
         }
     }
-    gameState.pawnKey = 0;
-    
-    for (int x = 0; x < 8; x++) {
-        for (int y = 0; y < 8; y++) {
-            Piece p = board[x][y];
-            if (p.type != EMPTY) {
-                if (p.type != KING) {
-                    pieceCount[p.color][p.type]++;
-                } else {
-                    kingPos[p.color] = {x, y};
-                }
-                
-                if (p.type == PAWN) {
-                    gameState.pawnKey ^= Zobrist::pieceKeys[p.color][PAWN][x * 8 + y];
-                }
-            }
-        }
-    }
+    historyPly = 0;
 }
 
-void Board::printBoard() {
-    for (int i = 7; i >= 0; --i) {
-        std::cout << i + 1 << " ";
-        for (int j = 0; j < 8; ++j) {
-            const Piece& p = board[i][j];
-            char symbol = '.';
-            if (p.type != EMPTY) {
-                switch (p.type) {
-                    case PAWN:   symbol = 'P'; break;
-                    case KNIGHT: symbol = 'N'; break;
-                    case BISHOP: symbol = 'B'; break;
-                    case ROOK:   symbol = 'R'; break;
-                    case QUEEN:  symbol = 'Q'; break;
-                    case KING:   symbol = 'K'; break;
-                    case EMPTY:  break;
-                }
-                if (p.color == BLACK) symbol = tolower(symbol);
-            }
-            std::cout << symbol << " ";
-        }
-        std::cout << std::endl;
-    }
-    std::cout << "  a b c d e f g h" << std::endl;
-}
-
-bool Board::isInBounds(int x, int y) const {
-    return x >= 0 && x < 8 && y >= 0 && y < 8;
-}
-
-Piece Board::getPiece(int x, int y) const {
-    return board[x][y];
-}
-
-std::pair<int, int> Board::findKing(Color color) const {
-    return kingPos[color];
-}
-
-bool Board::isSquareUnderAttack(int x, int y, Color byColor) const {
-    int pawnDir = (byColor == WHITE) ? 1 : -1;
-    if (isInBounds(x - pawnDir, y - 1) && board[x - pawnDir][y - 1].type == PAWN && board[x - pawnDir][y - 1].color == byColor) return true;
-    if (isInBounds(x - pawnDir, y + 1) && board[x - pawnDir][y + 1].type == PAWN && board[x - pawnDir][y + 1].color == byColor) return true;
-
-    int knightMoves[8][2] = {{-2,-1},{-2,1},{-1,-2},{-1,2},{1,-2},{1,2},{2,-1},{2,1}};
-    for (int i = 0; i < 8; i++) {
-        int nx = x + knightMoves[i][0], ny = y + knightMoves[i][1];
-        if (isInBounds(nx, ny) && board[nx][ny].type == KNIGHT && board[nx][ny].color == byColor) return true;
-    }
-
-    int diagDirs[4][2] = {{-1,-1},{-1,1},{1,-1},{1,1}};
-    for (int d = 0; d < 4; d++) {
-        for (int i = 1; i < 8; i++) {
-            int nx = x + i * diagDirs[d][0], ny = y + i * diagDirs[d][1];
-            if (!isInBounds(nx, ny)) break;
-            if (board[nx][ny].type != EMPTY) {
-                if (board[nx][ny].color == byColor && (board[nx][ny].type == BISHOP || board[nx][ny].type == QUEEN)) return true;
-                break;
-            }
-        }
-    }
-
-    int straightDirs[4][2] = {{-1,0},{1,0},{0,-1},{0,1}};
-    for (int d = 0; d < 4; d++) {
-        for (int i = 1; i < 8; i++) {
-            int nx = x + i * straightDirs[d][0], ny = y + i * straightDirs[d][1];
-            if (!isInBounds(nx, ny)) break;
-            if (board[nx][ny].type != EMPTY) {
-                if (board[nx][ny].color == byColor && (board[nx][ny].type == ROOK || board[nx][ny].type == QUEEN)) return true;
-                break;
-            }
-        }
-    }
-
-    for (int dx = -1; dx <= 1; dx++) {
-        for (int dy = -1; dy <= 1; dy++) {
-            if (dx == 0 && dy == 0) continue;
-            int nx = x + dx, ny = y + dy;
-            if (isInBounds(nx, ny) && board[nx][ny].type == KING && board[nx][ny].color == byColor) return true;
-        }
-    }
-
+bool Board::isSquareUnderAttack(int sq, Color byColor) const {
+    Bitboard occ = colors[WHITE] | colors[BLACK];
+    if (Attacks::pawnAttacks[byColor == WHITE ? BLACK : WHITE][sq] & pieces[PAWN] & colors[byColor]) return true;
+    if (Attacks::knightAttacks[sq] & pieces[KNIGHT] & colors[byColor]) return true;
+    if (Attacks::getBishopAttacks(sq, occ) & (pieces[BISHOP] | pieces[QUEEN]) & colors[byColor]) return true;
+    if (Attacks::getRookAttacks(sq, occ) & (pieces[ROOK] | pieces[QUEEN]) & colors[byColor]) return true;
+    if (Attacks::kingAttacks[sq] & pieces[KING] & colors[byColor]) return true;
     return false;
 }
 
+bool Board::isSquareUnderAttack(int x, int y, Color byColor) const {
+    return isSquareUnderAttack(x * 8 + y, byColor);
+}
+
 bool Board::isInCheck(Color color) const {
-    std::pair<int, int> kingPos = findKing(color);
-    if (kingPos.first == -1) {
-        return false;
-    }
-    bool result = isSquareUnderAttack(kingPos.first, kingPos.second, color == WHITE ? BLACK : WHITE);
-    return result;
+    int ksq = kingPos[color].first * 8 + kingPos[color].second;
+    return isSquareUnderAttack(ksq, color == WHITE ? BLACK : WHITE);
+}
+
+
+int getPieceValue(Piece p, int sq) {
+    if (p.type == EMPTY) return 0;
+    int r = sq / 8;
+    int f = sq % 8;
+    int score = Board::MG_VALUE[p.type];
+    if (p.color == WHITE) r = 7 - r;
+    if (p.type == PAWN) score += Board::PAWN_MG[r][f];
+    else if (p.type == KNIGHT) score += Board::KNIGHT_MG[r][f];
+    else if (p.type == BISHOP) score += Board::BISHOP_MG[r][f];
+    else if (p.type == ROOK) score += Board::ROOK_MG[r][f];
+    else if (p.type == QUEEN) score += Board::QUEEN_MG[r][f];
+    else if (p.type == KING) score += Board::KING_MG[r][f];
+    return p.color == WHITE ? score : -score;
+}
+
+int getPieceValueEg(Piece p, int sq) {
+    if (p.type == EMPTY) return 0;
+    int r = sq / 8;
+    int f = sq % 8;
+    int score = Board::EG_VALUE[p.type];
+    if (p.color == WHITE) r = 7 - r;
+    if (p.type == PAWN) score += Board::PAWN_EG[r][f];
+    else if (p.type == KNIGHT) score += Board::KNIGHT_EG[r][f];
+    else if (p.type == BISHOP) score += Board::BISHOP_EG[r][f];
+    else if (p.type == ROOK) score += Board::ROOK_EG[r][f];
+    else if (p.type == QUEEN) score += Board::QUEEN_EG[r][f];
+    else if (p.type == KING) score += Board::KING_EG[r][f];
+    return p.color == WHITE ? score : -score;
 }
 
 void Board::makeMove(const Move& m) {
     if (historyPly < 1024) {
         history[historyPly++] = gameState.zobristKey;
     }
-    Piece movingPiece = board[m.fromX][m.fromY];
     
-    if (movingPiece.type == PAWN || board[m.toX][m.toY].type != EMPTY) {
+    int fromSq = m.fromX * 8 + m.fromY;
+    int toSq = m.toX * 8 + m.toY;
+    
+    Piece p = pieceList[fromSq];
+    Piece captured = pieceList[toSq];
+    
+    if (p.type == PAWN || captured.type != EMPTY) {
         gameState.halfmoveClock = 0;
     } else {
         gameState.halfmoveClock++;
     }
     
-    if (movingPiece.color == BLACK) {
+    if (p.color == BLACK) {
         gameState.fullmoveNumber++;
     }
     
-    if (movingPiece.type == KING) {
-        kingPos[movingPiece.color] = {m.toX, m.toY};
+    Bitboard fromMask = 1ULL << fromSq;
+    Bitboard toMask = 1ULL << toSq;
+    Bitboard moveMask = fromMask | toMask;
+    
+    // Remove from original square
+    pieces[p.type] ^= fromMask;
+    colors[p.color] ^= fromMask;
+    pieceList[fromSq] = Piece(EMPTY, WHITE);
+    gameState.mgScore -= getPieceValue(p, fromSq);
+    gameState.egScore -= getPieceValueEg(p, fromSq);
+    gameState.zobristKey ^= Zobrist::pieceKeys[p.color][p.type][fromSq];
+    if (p.type == PAWN) gameState.pawnKey ^= Zobrist::pieceKeys[p.color][PAWN][fromSq];
+    
+    // Handle capture
+    if (captured.type != EMPTY) {
+        pieces[captured.type] ^= toMask;
+        colors[captured.color] ^= toMask;
+        pieceCount[captured.color][captured.type]--;
+        gameState.mgScore -= getPieceValue(captured, toSq);
+        gameState.egScore -= getPieceValueEg(captured, toSq);
+        gameState.zobristKey ^= Zobrist::pieceKeys[captured.color][captured.type][toSq];
+        if (captured.type == PAWN) gameState.pawnKey ^= Zobrist::pieceKeys[captured.color][PAWN][toSq];
     }
     
-    if (movingPiece.type == PAWN) {
-        gameState.pawnKey ^= Zobrist::pieceKeys[movingPiece.color][PAWN][m.fromX * 8 + m.fromY];
+    // If it's a promotion, we change the piece type now
+    if (m.promotion != EMPTY) {
+        pieceCount[p.color][PAWN]--;
+        pieceCount[p.color][m.promotion]++;
+        p.type = m.promotion;
     }
     
+    // Place piece at new square
+    pieceList[toSq] = p;
+    gameState.mgScore += getPieceValue(p, toSq);
+    gameState.egScore += getPieceValueEg(p, toSq);
+    gameState.zobristKey ^= Zobrist::pieceKeys[p.color][p.type][toSq];
+    if (p.type == PAWN) gameState.pawnKey ^= Zobrist::pieceKeys[p.color][PAWN][toSq];
+    
+    // Special moves
+    if (m.isCastle) {
+        int r = p.color == WHITE ? 0 : 7;
+        int rookFromSq = r*8 + (m.toY == 6 ? 7 : 0);
+        int rookToSq = r*8 + (m.toY == 6 ? 5 : 3);
+        
+        pieces[ROOK] ^= (1ULL << rookFromSq) | (1ULL << rookToSq);
+        colors[p.color] ^= (1ULL << rookFromSq) | (1ULL << rookToSq);
+        
+        Piece rookPiece(ROOK, p.color);
+        pieceList[rookFromSq] = Piece(EMPTY, WHITE);
+        pieceList[rookToSq] = rookPiece;
+        
+        gameState.mgScore -= getPieceValue(rookPiece, rookFromSq);
+        gameState.egScore -= getPieceValueEg(rookPiece, rookFromSq);
+        gameState.mgScore += getPieceValue(rookPiece, rookToSq);
+        gameState.egScore += getPieceValueEg(rookPiece, rookToSq);
+        
+        gameState.zobristKey ^= Zobrist::pieceKeys[p.color][ROOK][rookFromSq];
+        gameState.zobristKey ^= Zobrist::pieceKeys[p.color][ROOK][rookToSq];
+    } else if (m.isEnPassant) {
+        int capSq = fromSq / 8 * 8 + toSq % 8;
+        pieces[PAWN] ^= (1ULL << capSq);
+        Color capColor = p.color == WHITE ? BLACK : WHITE;
+        colors[capColor] ^= (1ULL << capSq);
+        pieceCount[capColor][PAWN]--;
+        
+        Piece capPawn(PAWN, capColor);
+        pieceList[capSq] = Piece(EMPTY, WHITE);
+        
+        gameState.mgScore -= getPieceValue(capPawn, capSq);
+        gameState.egScore -= getPieceValueEg(capPawn, capSq);
+        gameState.zobristKey ^= Zobrist::pieceKeys[capColor][PAWN][capSq];
+        gameState.pawnKey ^= Zobrist::pieceKeys[capColor][PAWN][capSq];
+    }
+    
+    // Add piece to bitboard (doing it after promotion check)
+    pieces[p.type] ^= toMask;
+    colors[p.color] ^= toMask;
+    
+    // Update king pos
+    if (p.type == KING) {
+        kingPos[p.color] = {m.toX, m.toY};
+    }
+    
+    // Remove old castling rights from Zobrist
     int oldCastle = 0;
     if (gameState.whiteCanCastleKingside) oldCastle |= 1;
     if (gameState.whiteCanCastleQueenside) oldCastle |= 2;
@@ -438,63 +509,14 @@ void Board::makeMove(const Move& m) {
     if (gameState.blackCanCastleQueenside) oldCastle |= 8;
     gameState.zobristKey ^= Zobrist::castleKeys[oldCastle];
     
+    // Remove old en passant
     if (gameState.hasEnPassant) {
         gameState.zobristKey ^= Zobrist::enPassantKeys[gameState.enPassantY];
     }
     
-    gameState.zobristKey ^= Zobrist::pieceKeys[movingPiece.color][movingPiece.type][m.fromX * 8 + m.fromY];
+    updateGameState(m, p);
     
-    if (m.isEnPassant) {
-        Piece capturedPawn = board[m.fromX][m.toY];
-        gameState.zobristKey ^= Zobrist::pieceKeys[capturedPawn.color][capturedPawn.type][m.fromX * 8 + m.toY];
-        gameState.pawnKey ^= Zobrist::pieceKeys[capturedPawn.color][PAWN][m.fromX * 8 + m.toY];
-        pieceCount[capturedPawn.color][PAWN]--;
-        board[m.fromX][m.toY] = Piece();
-    } else {
-        Piece captured = board[m.toX][m.toY];
-        if (captured.type != EMPTY) {
-            gameState.zobristKey ^= Zobrist::pieceKeys[captured.color][captured.type][m.toX * 8 + m.toY];
-            if (captured.type == PAWN) {
-                gameState.pawnKey ^= Zobrist::pieceKeys[captured.color][PAWN][m.toX * 8 + m.toY];
-            }
-            pieceCount[captured.color][captured.type]--;
-        }
-    }
-    
-    if (m.isCastle) {
-        if (m.toY == 6) {
-            Piece rook = board[m.fromX][7];
-            gameState.zobristKey ^= Zobrist::pieceKeys[rook.color][rook.type][m.fromX * 8 + 7];
-            gameState.zobristKey ^= Zobrist::pieceKeys[rook.color][rook.type][m.fromX * 8 + 5];
-            board[m.fromX][5] = board[m.fromX][7];
-            board[m.fromX][7] = Piece();
-        } else if (m.toY == 2) {
-            Piece rook = board[m.fromX][0];
-            gameState.zobristKey ^= Zobrist::pieceKeys[rook.color][rook.type][m.fromX * 8 + 0];
-            gameState.zobristKey ^= Zobrist::pieceKeys[rook.color][rook.type][m.fromX * 8 + 3];
-            board[m.fromX][3] = board[m.fromX][0];
-            board[m.fromX][0] = Piece();
-        }
-    }
-    
-    board[m.toX][m.toY] = movingPiece;
-    board[m.fromX][m.fromY] = Piece();
-    
-    Piece placedPiece = movingPiece;
-    if (m.promotion != EMPTY) {
-        placedPiece = Piece(m.promotion, movingPiece.color);
-        board[m.toX][m.toY] = placedPiece;
-        pieceCount[movingPiece.color][PAWN]--;
-        pieceCount[placedPiece.color][placedPiece.type]++;
-    }
-    
-    gameState.zobristKey ^= Zobrist::pieceKeys[placedPiece.color][placedPiece.type][m.toX * 8 + m.toY];
-    if (placedPiece.type == PAWN) {
-        gameState.pawnKey ^= Zobrist::pieceKeys[placedPiece.color][PAWN][m.toX * 8 + m.toY];
-    }
-    
-    updateGameState(m, movingPiece);
-    
+    // Add new castling rights
     int newCastle = 0;
     if (gameState.whiteCanCastleKingside) newCastle |= 1;
     if (gameState.whiteCanCastleQueenside) newCastle |= 2;
@@ -502,62 +524,82 @@ void Board::makeMove(const Move& m) {
     if (gameState.blackCanCastleQueenside) newCastle |= 8;
     gameState.zobristKey ^= Zobrist::castleKeys[newCastle];
     
+    // Add new en passant
     if (gameState.hasEnPassant) {
         gameState.zobristKey ^= Zobrist::enPassantKeys[gameState.enPassantY];
     }
     
+    // Switch turn
     gameState.zobristKey ^= Zobrist::sideKey;
 }
 
 void Board::undoMove(const Move& m, const Piece& captured, const GameState& prevState) {
-    Piece movingPiece = board[m.toX][m.toY];
+    int fromSq = m.fromX * 8 + m.fromY;
+    int toSq = m.toX * 8 + m.toY;
     
-    if (movingPiece.type == KING) {
-        kingPos[movingPiece.color] = {m.fromX, m.fromY};
-    }
+    Piece p = pieceList[toSq]; // It's currently at toSq
+    if (m.promotion != EMPTY) p.type = PAWN;
     
+    Bitboard fromMask = 1ULL << fromSq;
+    Bitboard toMask = 1ULL << toSq;
+    Bitboard moveMask = fromMask | toMask;
+    
+    // Reverse the move for the piece
     if (m.promotion != EMPTY) {
-        movingPiece = Piece(PAWN, movingPiece.color);
-        pieceCount[movingPiece.color][PAWN]++;
-        pieceCount[movingPiece.color][m.promotion]--;
+        pieces[m.promotion] ^= toMask;
+        pieces[PAWN] ^= fromMask;
+        colors[p.color] ^= moveMask;
+        pieceCount[p.color][PAWN]++;
+        pieceCount[p.color][m.promotion]--;
+    } else {
+        pieces[p.type] ^= moveMask;
+        colors[p.color] ^= moveMask;
     }
     
-    board[m.fromX][m.fromY] = movingPiece;
-    board[m.toX][m.toY] = captured;
+    pieceList[fromSq] = p;
+    pieceList[toSq] = captured;
     
     if (captured.type != EMPTY) {
+        pieces[captured.type] ^= toMask;
+        colors[captured.color] ^= toMask;
         pieceCount[captured.color][captured.type]++;
     }
     
-    if (m.isEnPassant) {
-        board[m.fromX][m.toY] = Piece(PAWN, movingPiece.color == WHITE ? BLACK : WHITE);
-        pieceCount[movingPiece.color == WHITE ? BLACK : WHITE][PAWN]++;
-        board[m.toX][m.toY] = Piece();
+    if (m.isCastle) {
+        int r = p.color == WHITE ? 0 : 7;
+        int rookFromSq = r*8 + (m.toY == 6 ? 7 : 0);
+        int rookToSq = r*8 + (m.toY == 6 ? 5 : 3);
+        
+        pieces[ROOK] ^= (1ULL << rookFromSq) | (1ULL << rookToSq);
+        colors[p.color] ^= (1ULL << rookFromSq) | (1ULL << rookToSq);
+        
+        pieceList[rookFromSq] = Piece(ROOK, p.color);
+        pieceList[rookToSq] = Piece(EMPTY, WHITE);
+    } else if (m.isEnPassant) {
+        int capSq = fromSq / 8 * 8 + toSq % 8;
+        Color capColor = p.color == WHITE ? BLACK : WHITE;
+        pieces[PAWN] ^= (1ULL << capSq);
+        colors[capColor] ^= (1ULL << capSq);
+        pieceCount[capColor][PAWN]++;
+        pieceList[capSq] = Piece(PAWN, capColor);
+        pieceList[toSq] = Piece(EMPTY, WHITE); // Because it was empty before capture
     }
     
-    if (m.isCastle) {
-        if (m.toY == 6) {
-            board[m.fromX][7] = board[m.fromX][5];
-            board[m.fromX][5] = Piece();
-        } else if (m.toY == 2) {
-            board[m.fromX][0] = board[m.fromX][3];
-            board[m.fromX][3] = Piece();
-        }
+    if (p.type == KING) {
+        kingPos[p.color] = {m.fromX, m.fromY};
     }
     
     gameState = prevState;
-    if (historyPly > 0) {
-        historyPly--;
-    }
+    historyPly--;
 }
 
 void Board::updateGameState(const Move& m, const Piece& movingPiece) {
+    // Basic stuff
     gameState.hasEnPassant = false;
-    
-    if (movingPiece.type == PAWN && abs(m.toX - m.fromX) == 2) {
+    if (movingPiece.type == PAWN && abs(m.fromX - m.toX) == 2) {
+        gameState.hasEnPassant = true;
         gameState.enPassantX = (m.fromX + m.toX) / 2;
         gameState.enPassantY = m.fromY;
-        gameState.hasEnPassant = true;
     }
     
     if (movingPiece.type == KING) {
@@ -568,220 +610,243 @@ void Board::updateGameState(const Move& m, const Piece& movingPiece) {
             gameState.blackCanCastleKingside = false;
             gameState.blackCanCastleQueenside = false;
         }
+    } else if (movingPiece.type == ROOK) {
+        if (m.fromX == 0 && m.fromY == 0) gameState.whiteCanCastleQueenside = false;
+        if (m.fromX == 0 && m.fromY == 7) gameState.whiteCanCastleKingside = false;
+        if (m.fromX == 7 && m.fromY == 0) gameState.blackCanCastleQueenside = false;
+        if (m.fromX == 7 && m.fromY == 7) gameState.blackCanCastleKingside = false;
     }
-    
-    if (movingPiece.type == ROOK) {
-        if (movingPiece.color == WHITE) {
-            if (m.fromX == 0 && m.fromY == 0) gameState.whiteCanCastleQueenside = false;
-            if (m.fromX == 0 && m.fromY == 7) gameState.whiteCanCastleKingside = false;
-        } else {
-            if (m.fromX == 7 && m.fromY == 0) gameState.blackCanCastleQueenside = false;
-            if (m.fromX == 7 && m.fromY == 7) gameState.blackCanCastleKingside = false;
-        }
-    }
-    
+    // Handle rook captures revoking castling rights
     if (m.toX == 0 && m.toY == 0) gameState.whiteCanCastleQueenside = false;
     if (m.toX == 0 && m.toY == 7) gameState.whiteCanCastleKingside = false;
     if (m.toX == 7 && m.toY == 0) gameState.blackCanCastleQueenside = false;
     if (m.toX == 7 && m.toY == 7) gameState.blackCanCastleKingside = false;
 }
 
-void Board::generateMoves(Color color, MoveList& moves) {
-
-    for (int x = 0; x < BOARD_SIZE; ++x) {
-        for (int y = 0; y < BOARD_SIZE; ++y) {
-            Piece p = board[x][y];
-            if (p.type == EMPTY || p.color != color) continue;
-
-            switch (p.type) {
-                case EMPTY:
-                    break;
-                case PAWN:
-                    generatePawnMoves(x, y, color, moves);
-                    break;
-                case KNIGHT:
-                    generateKnightMoves(x, y, color, moves);
-                    break;
-                case BISHOP:
-                    generateBishopMoves(x, y, color, moves);
-                    break;
-                case ROOK:
-                    generateRookMoves(x, y, color, moves);
-                    break;
-                case QUEEN:
-                    generateQueenMoves(x, y, color, moves);
-                    break;
-                case KING:
-                    generateKingMoves(x, y, color, moves);
-                    break;
+void Board::generatePawnMoves(Color color, MoveList& moves, Bitboard target) {
+    Bitboard pawns = pieces[PAWN] & colors[color];
+    Bitboard empty = ~(colors[WHITE] | colors[BLACK]);
+    Bitboard enemies = colors[color == WHITE ? BLACK : WHITE];
+    int dir = (color == WHITE) ? 8 : -8;
+    
+    // Single push
+    Bitboard singlePushes = (color == WHITE ? pawns << 8 : pawns >> 8) & empty;
+    Bitboard validPushes = singlePushes & target;
+    Bitboard p = validPushes;
+    while (p) {
+        int toSq = __builtin_ctzll(p);
+        int fromSq = toSq - dir;
+        if (toSq / 8 == (color == WHITE ? 7 : 0)) {
+            moves.push_back(Move(fromSq/8, fromSq%8, toSq/8, toSq%8, QUEEN));
+            moves.push_back(Move(fromSq/8, fromSq%8, toSq/8, toSq%8, ROOK));
+            moves.push_back(Move(fromSq/8, fromSq%8, toSq/8, toSq%8, BISHOP));
+            moves.push_back(Move(fromSq/8, fromSq%8, toSq/8, toSq%8, KNIGHT));
+        } else {
+            moves.push_back(Move(fromSq/8, fromSq%8, toSq/8, toSq%8));
+        }
+        p &= p - 1;
+    }
+    
+    // Double push
+    Bitboard doublePushes = (color == WHITE ? (singlePushes & 0x0000000000FF0000ULL) << 8 : (singlePushes & 0x0000FF0000000000ULL) >> 8) & empty;
+    validPushes = doublePushes & target;
+    p = validPushes;
+    while (p) {
+        int toSq = __builtin_ctzll(p);
+        int fromSq = toSq - 2 * dir;
+        moves.push_back(Move(fromSq/8, fromSq%8, toSq/8, toSq%8));
+        p &= p - 1;
+    }
+    
+    // Captures
+    Bitboard attacksLeft = (color == WHITE) ? (pawns & ~0x0101010101010101ULL) << 7 : (pawns & ~0x0101010101010101ULL) >> 9;
+    Bitboard attacksRight = (color == WHITE) ? (pawns & ~0x8080808080808080ULL) << 9 : (pawns & ~0x8080808080808080ULL) >> 7;
+    
+    Bitboard validLeft = attacksLeft & enemies & target;
+    p = validLeft;
+    while (p) {
+        int toSq = __builtin_ctzll(p);
+        int fromSq = toSq - (color == WHITE ? 7 : -9);
+        if (toSq / 8 == (color == WHITE ? 7 : 0)) {
+            moves.push_back(Move(fromSq/8, fromSq%8, toSq/8, toSq%8, QUEEN));
+            moves.push_back(Move(fromSq/8, fromSq%8, toSq/8, toSq%8, ROOK));
+            moves.push_back(Move(fromSq/8, fromSq%8, toSq/8, toSq%8, BISHOP));
+            moves.push_back(Move(fromSq/8, fromSq%8, toSq/8, toSq%8, KNIGHT));
+        } else {
+            moves.push_back(Move(fromSq/8, fromSq%8, toSq/8, toSq%8));
+        }
+        p &= p - 1;
+    }
+    
+    Bitboard validRight = attacksRight & enemies & target;
+    p = validRight;
+    while (p) {
+        int toSq = __builtin_ctzll(p);
+        int fromSq = toSq - (color == WHITE ? 9 : -7);
+        if (toSq / 8 == (color == WHITE ? 7 : 0)) {
+            moves.push_back(Move(fromSq/8, fromSq%8, toSq/8, toSq%8, QUEEN));
+            moves.push_back(Move(fromSq/8, fromSq%8, toSq/8, toSq%8, ROOK));
+            moves.push_back(Move(fromSq/8, fromSq%8, toSq/8, toSq%8, BISHOP));
+            moves.push_back(Move(fromSq/8, fromSq%8, toSq/8, toSq%8, KNIGHT));
+        } else {
+            moves.push_back(Move(fromSq/8, fromSq%8, toSq/8, toSq%8));
+        }
+        p &= p - 1;
+    }
+    
+    // En passant
+    if (gameState.hasEnPassant) {
+        int epSq = gameState.enPassantX * 8 + gameState.enPassantY;
+        Bitboard epMask = 1ULL << epSq;
+        if (epMask & target) {
+            Bitboard epLeft = attacksLeft & epMask;
+            if (epLeft) {
+                int toSq = __builtin_ctzll(epLeft);
+                int fromSq = toSq - (color == WHITE ? 7 : -9);
+                moves.push_back(Move(fromSq/8, fromSq%8, toSq/8, toSq%8, EMPTY, true));
+            }
+            Bitboard epRight = attacksRight & epMask;
+            if (epRight) {
+                int toSq = __builtin_ctzll(epRight);
+                int fromSq = toSq - (color == WHITE ? 9 : -7);
+                moves.push_back(Move(fromSq/8, fromSq%8, toSq/8, toSq%8, EMPTY, true));
             }
         }
     }
-    
-    
 }
 
-void Board::generatePawnMoves(int x, int y, Color color, MoveList& moves) {
-    int dir = (color == WHITE) ? 1 : -1;
-    int startRow = (color == WHITE) ? 1 : 6;
-    int promotionRow = (color == WHITE) ? 7 : 0;
-    
-    if (isInBounds(x + dir, y) && board[x + dir][y].type == EMPTY) {
-        if (x + dir == promotionRow) {
-            moves.push_back(Move(x, y, x + dir, y, QUEEN));
-            moves.push_back(Move(x, y, x + dir, y, ROOK));
-            moves.push_back(Move(x, y, x + dir, y, BISHOP));
-            moves.push_back(Move(x, y, x + dir, y, KNIGHT));
-        } else {
-            moves.push_back(Move(x, y, x + dir, y));
+void Board::generateKnightMoves(Color color, MoveList& moves, Bitboard target) {
+    Bitboard knights = pieces[KNIGHT] & colors[color];
+    while (knights) {
+        int sq = __builtin_ctzll(knights);
+        Bitboard attacks = Attacks::knightAttacks[sq] & target;
+        while (attacks) {
+            int toSq = __builtin_ctzll(attacks);
+            moves.push_back(Move(sq/8, sq%8, toSq/8, toSq%8));
+            attacks &= attacks - 1;
+        }
+        knights &= knights - 1;
+    }
+}
+
+void Board::generateBishopMoves(Color color, MoveList& moves, Bitboard target) {
+    Bitboard bishops = pieces[BISHOP] & colors[color];
+    Bitboard occ = colors[WHITE] | colors[BLACK];
+    while (bishops) {
+        int sq = __builtin_ctzll(bishops);
+        Bitboard attacks = Attacks::getBishopAttacks(sq, occ) & target;
+        while (attacks) {
+            int toSq = __builtin_ctzll(attacks);
+            moves.push_back(Move(sq/8, sq%8, toSq/8, toSq%8));
+            attacks &= attacks - 1;
+        }
+        bishops &= bishops - 1;
+    }
+}
+
+void Board::generateRookMoves(Color color, MoveList& moves, Bitboard target) {
+    Bitboard rooks = pieces[ROOK] & colors[color];
+    Bitboard occ = colors[WHITE] | colors[BLACK];
+    while (rooks) {
+        int sq = __builtin_ctzll(rooks);
+        Bitboard attacks = Attacks::getRookAttacks(sq, occ) & target;
+        while (attacks) {
+            int toSq = __builtin_ctzll(attacks);
+            moves.push_back(Move(sq/8, sq%8, toSq/8, toSq%8));
+            attacks &= attacks - 1;
+        }
+        rooks &= rooks - 1;
+    }
+}
+
+void Board::generateQueenMoves(Color color, MoveList& moves, Bitboard target) {
+    Bitboard queens = pieces[QUEEN] & colors[color];
+    Bitboard occ = colors[WHITE] | colors[BLACK];
+    while (queens) {
+        int sq = __builtin_ctzll(queens);
+        Bitboard attacks = Attacks::getQueenAttacks(sq, occ) & target;
+        while (attacks) {
+            int toSq = __builtin_ctzll(attacks);
+            moves.push_back(Move(sq/8, sq%8, toSq/8, toSq%8));
+            attacks &= attacks - 1;
+        }
+        queens &= queens - 1;
+    }
+}
+
+void Board::generateKingMoves(Color color, MoveList& moves, Bitboard target) {
+    Bitboard king = pieces[KING] & colors[color];
+    if (king) {
+        int sq = __builtin_ctzll(king);
+        Bitboard attacks = Attacks::kingAttacks[sq] & target;
+        while (attacks) {
+            int toSq = __builtin_ctzll(attacks);
+            moves.push_back(Move(sq/8, sq%8, toSq/8, toSq%8));
+            attacks &= attacks - 1;
         }
         
-        if (x == startRow && board[x + 2 * dir][y].type == EMPTY) {
-            moves.push_back(Move(x, y, x + 2 * dir, y));
-        }
-    }
-    
-    for (int dy = -1; dy <= 1; dy += 2) {
-        if (isInBounds(x + dir, y + dy)) {
-            Piece target = board[x + dir][y + dy];
-            if (target.type != EMPTY && target.color != color) {
-                if (x + dir == promotionRow) {
-                    moves.push_back(Move(x, y, x + dir, y + dy, QUEEN));
-                    moves.push_back(Move(x, y, x + dir, y + dy, ROOK));
-                    moves.push_back(Move(x, y, x + dir, y + dy, BISHOP));
-                    moves.push_back(Move(x, y, x + dir, y + dy, KNIGHT));
-                } else {
-                    moves.push_back(Move(x, y, x + dir, y + dy));
+        // Castling
+        if (!isInCheck(color)) {
+            if (color == WHITE) {
+                if (gameState.whiteCanCastleKingside) {
+                    if (!((colors[WHITE] | colors[BLACK]) & ((1ULL << 5) | (1ULL << 6)))) {
+                        if (!isSquareUnderAttack(5, BLACK) && !isSquareUnderAttack(6, BLACK)) {
+                            moves.push_back(Move(0, 4, 0, 6, EMPTY, false, true));
+                        }
+                    }
                 }
-            }
-        }
-    }
-    
-    if (gameState.hasEnPassant && x + dir == gameState.enPassantX) {
-        if (y + 1 == gameState.enPassantY || y - 1 == gameState.enPassantY) {
-            moves.push_back(Move(x, y, gameState.enPassantX, gameState.enPassantY, EMPTY, true));
-        }
-    }
-}
-
-void Board::generateKnightMoves(int x, int y, Color color, MoveList& moves) {
-    int dx[] = {-2,-1,1,2,2,1,-1,-2};
-    int dy[] = {1,2,2,1,-1,-2,-2,-1};
-    for (int i = 0; i < 8; i++) {
-        int nx = x + dx[i], ny = y + dy[i];
-        if (isInBounds(nx, ny)) {
-            Piece target = board[nx][ny];
-            if (target.type == EMPTY || target.color != color) {
-                moves.push_back(Move(x, y, nx, ny));
-            }
-        }
-    }
-}
-
-void Board::generateBishopMoves(int x, int y, Color color, MoveList& moves) {
-    int dirs[4][2] = {{-1,-1},{-1,1},{1,-1},{1,1}};
-    for (int d = 0; d < 4; d++) {
-        for (int i = 1; i < 8; i++) {
-            int nx = x + i * dirs[d][0], ny = y + i * dirs[d][1];
-            if (!isInBounds(nx, ny)) break;
-            
-            Piece target = board[nx][ny];
-            if (target.type == EMPTY) {
-                moves.push_back(Move(x, y, nx, ny));
+                if (gameState.whiteCanCastleQueenside) {
+                    if (!((colors[WHITE] | colors[BLACK]) & ((1ULL << 1) | (1ULL << 2) | (1ULL << 3)))) {
+                        if (!isSquareUnderAttack(2, BLACK) && !isSquareUnderAttack(3, BLACK)) {
+                            moves.push_back(Move(0, 4, 0, 2, EMPTY, false, true));
+                        }
+                    }
+                }
             } else {
-                if (target.color != color) {
-                    moves.push_back(Move(x, y, nx, ny));
+                if (gameState.blackCanCastleKingside) {
+                    if (!((colors[WHITE] | colors[BLACK]) & ((1ULL << 61) | (1ULL << 62)))) {
+                        if (!isSquareUnderAttack(61, WHITE) && !isSquareUnderAttack(62, WHITE)) {
+                            moves.push_back(Move(7, 4, 7, 6, EMPTY, false, true));
+                        }
+                    }
                 }
-                break;
+                if (gameState.blackCanCastleQueenside) {
+                    if (!((colors[WHITE] | colors[BLACK]) & ((1ULL << 57) | (1ULL << 58) | (1ULL << 59)))) {
+                        if (!isSquareUnderAttack(58, WHITE) && !isSquareUnderAttack(59, WHITE)) {
+                            moves.push_back(Move(7, 4, 7, 2, EMPTY, false, true));
+                        }
+                    }
+                }
             }
         }
     }
 }
 
-void Board::generateRookMoves(int x, int y, Color color, MoveList& moves) {
-    int dirs[4][2] = {{-1,0},{1,0},{0,-1},{0,1}};
-    for (int d = 0; d < 4; d++) {
-        for (int i = 1; i < 8; i++) {
-            int nx = x + i * dirs[d][0], ny = y + i * dirs[d][1];
-            if (!isInBounds(nx, ny)) break;
-            
-            Piece target = board[nx][ny];
-            if (target.type == EMPTY) {
-                moves.push_back(Move(x, y, nx, ny));
-            } else {
-                if (target.color != color) {
-                    moves.push_back(Move(x, y, nx, ny));
-                }
-                break;
-            }
-        }
-    }
-}
-
-void Board::generateQueenMoves(int x, int y, Color color, MoveList& moves) {
-    generateBishopMoves(x, y, color, moves);
-    generateRookMoves(x, y, color, moves);
-}
-
-void Board::generateKingMoves(int x, int y, Color color, MoveList& moves) {
-    for (int dx = -1; dx <= 1; dx++) {
-        for (int dy = -1; dy <= 1; dy++) {
-            if (dx == 0 && dy == 0) continue;
-            int nx = x + dx, ny = y + dy;
-            if (isInBounds(nx, ny)) {
-                Piece target = board[nx][ny];
-                if (target.type == EMPTY || target.color != color) {
-                    moves.push_back(Move(x, y, nx, ny));
-                }
-            }
-        }
-    }
-    
-    if (!isInCheck(color)) {
-        if (color == WHITE) {
-            if (gameState.whiteCanCastleKingside && 
-                board[0][5].type == EMPTY && board[0][6].type == EMPTY &&
-                !isSquareUnderAttack(0, 5, BLACK) && !isSquareUnderAttack(0, 6, BLACK)) {
-                moves.push_back(Move(x, y, 0, 6, EMPTY, false, true));
-            }
-            if (gameState.whiteCanCastleQueenside && 
-                board[0][1].type == EMPTY && board[0][2].type == EMPTY && board[0][3].type == EMPTY &&
-                !isSquareUnderAttack(0, 2, BLACK) && !isSquareUnderAttack(0, 3, BLACK)) {
-                moves.push_back(Move(x, y, 0, 2, EMPTY, false, true));
-            }
-        } else {
-            if (gameState.blackCanCastleKingside && 
-                board[7][5].type == EMPTY && board[7][6].type == EMPTY &&
-                !isSquareUnderAttack(7, 5, WHITE) && !isSquareUnderAttack(7, 6, WHITE)) {
-                moves.push_back(Move(x, y, 7, 6, EMPTY, false, true));
-            }
-            if (gameState.blackCanCastleQueenside && 
-                board[7][1].type == EMPTY && board[7][2].type == EMPTY && board[7][3].type == EMPTY &&
-                !isSquareUnderAttack(7, 2, WHITE) && !isSquareUnderAttack(7, 3, WHITE)) {
-                moves.push_back(Move(x, y, 7, 2, EMPTY, false, true));
-            }
-        }
-    }
+void Board::generateMoves(Color color, MoveList& moves) {
+    Bitboard target = ~colors[color]; // Can move to empty or enemy squares
+    generatePawnMoves(color, moves, target);
+    generateKnightMoves(color, moves, target);
+    generateBishopMoves(color, moves, target);
+    generateRookMoves(color, moves, target);
+    generateQueenMoves(color, moves, target);
+    generateKingMoves(color, moves, target);
 }
 
 void Board::generateLegalMoves(Color color, MoveList& legalMoves) {
-    MoveList allMoves;
-    generateMoves(color, allMoves);
+    MoveList pseudoMoves;
+    generateMoves(color, pseudoMoves);
     
-    for (const Move& move : allMoves) {
+    for (int i=0; i<pseudoMoves.size(); ++i) {
+        Move m = pseudoMoves[i];
+        Piece captured = getPiece(m.toX * 8 + m.toY);
         GameState prevState = gameState;
-        Piece captured = getPiece(move.toX, move.toY);
-        
-        makeMove(move);
-        
+        makeMove(m);
         if (!isInCheck(color)) {
-            legalMoves.push_back(move);
+            legalMoves.push_back(m);
         }
-        
-        undoMove(move, captured, prevState);
+        undoMove(m, captured, prevState);
     }
-    
-    }
+}
 
 bool Board::isCheckmate(Color color) {
     if (!isInCheck(color)) return false;
@@ -798,52 +863,40 @@ bool Board::isStalemate(Color color) {
 }
 
 bool Board::hasNonPawnMaterial(Color color) const {
-    return pieceCount[color][KNIGHT] > 0 || 
-           pieceCount[color][BISHOP] > 0 || 
-           pieceCount[color][ROOK] > 0 || 
-           pieceCount[color][QUEEN] > 0;
+    return (pieces[KNIGHT] | pieces[BISHOP] | pieces[ROOK] | pieces[QUEEN]) & colors[color];
+}
+
+bool Board::isInsufficientMaterial() {
+    Bitboard allPieces = colors[WHITE] | colors[BLACK];
+    if (pieces[PAWN] || pieces[ROOK] || pieces[QUEEN]) return false;
+    
+    int whiteKnights = __builtin_popcountll(pieces[KNIGHT] & colors[WHITE]);
+    int blackKnights = __builtin_popcountll(pieces[KNIGHT] & colors[BLACK]);
+    int whiteBishops = __builtin_popcountll(pieces[BISHOP] & colors[WHITE]);
+    int blackBishops = __builtin_popcountll(pieces[BISHOP] & colors[BLACK]);
+    
+    if (whiteKnights == 0 && blackKnights == 0 && whiteBishops == 0 && blackBishops == 0) return true;
+    if (whiteKnights == 1 && blackKnights == 0 && whiteBishops == 0 && blackBishops == 0) return true;
+    if (whiteKnights == 0 && blackKnights == 1 && whiteBishops == 0 && blackBishops == 0) return true;
+    if (whiteKnights == 0 && blackKnights == 0 && whiteBishops == 1 && blackBishops == 0) return true;
+    if (whiteKnights == 0 && blackKnights == 0 && whiteBishops == 0 && blackBishops == 1) return true;
+    return false;
 }
 
 bool Board::isRepetition() const {
-    if (gameState.halfmoveClock < 4) return false;
     if (historyPly < 4) return false;
-    int limit = std::max(0, historyPly - gameState.halfmoveClock);
-    int repetitions = 0;
-    // We only need to check every 2 plies (same side to move)
-    for (int i = historyPly - 4; i >= limit; i -= 2) {
+    int reps = 0;
+    for (int i = historyPly - 4; i >= 0; i -= 2) {
         if (history[i] == gameState.zobristKey) {
-            repetitions++;
-            if (repetitions >= 1) return true; // 2-fold repetition is enough to score a draw in search
+            reps++;
+            if (reps >= 1) return true; // 2-fold repetition in our context for fast draw detection
         }
     }
     return false;
 }
 
-bool Board::isInsufficientMaterial() {
-    int whitePieces = pieceCount[WHITE][PAWN] + pieceCount[WHITE][KNIGHT] + pieceCount[WHITE][BISHOP] + pieceCount[WHITE][ROOK] + pieceCount[WHITE][QUEEN];
-    int blackPieces = pieceCount[BLACK][PAWN] + pieceCount[BLACK][KNIGHT] + pieceCount[BLACK][BISHOP] + pieceCount[BLACK][ROOK] + pieceCount[BLACK][QUEEN];
-    
-    if (whitePieces == 0 && blackPieces == 0) return true;
-    
-    if (whitePieces == 1 && blackPieces == 0 && pieceCount[WHITE][PAWN] == 0 && pieceCount[WHITE][ROOK] == 0 && pieceCount[WHITE][QUEEN] == 0) return true;
-    if (blackPieces == 1 && whitePieces == 0 && pieceCount[BLACK][PAWN] == 0 && pieceCount[BLACK][ROOK] == 0 && pieceCount[BLACK][QUEEN] == 0) return true;
-    
-    return false;
-}
-
 bool Board::isDraw() {
-    if (gameState.halfmoveClock >= 100) return true;
-    return isInsufficientMaterial();
-}
-
-int Board::evaluateMobility() {
-    MoveList wm;
-    generateMoves(WHITE, wm);
-    int whiteMobility = wm.size();
-    MoveList bm;
-    generateMoves(BLACK, bm);
-    int blackMobility = bm.size();
-    return (whiteMobility - blackMobility) * 10;
+    return gameState.halfmoveClock >= 100 || isRepetition() || isInsufficientMaterial();
 }
 
 std::pair<int, int> Board::evaluatePawnStructure() {
@@ -856,248 +909,196 @@ std::pair<int, int> Board::evaluatePawnStructure() {
     int mgScore = 0;
     int egScore = 0;
     
+    Bitboard whitePawns = pieces[PAWN] & colors[WHITE];
+    Bitboard blackPawns = pieces[PAWN] & colors[BLACK];
+    
     int whitePawnsOnFile[8] = {0};
     int blackPawnsOnFile[8] = {0};
-    int maxBlackPawnX[8] = {-1,-1,-1,-1,-1,-1,-1,-1};
-    int minWhitePawnX[8] = {8,8,8,8,8,8,8,8};
     
-    // First pass: gather pawn data
-    for (int y = 0; y < 8; y++) {
-        for (int x = 0; x < 8; x++) {
-            if (board[x][y].type == PAWN) {
-                if (board[x][y].color == WHITE) {
-                    whitePawnsOnFile[y]++;
-                    if (x < minWhitePawnX[y]) minWhitePawnX[y] = x;
-                } else {
-                    blackPawnsOnFile[y]++;
-                    if (x > maxBlackPawnX[y]) maxBlackPawnX[y] = x;
-                }
-            }
+    Bitboard wp = whitePawns;
+    while (wp) {
+        int sq = __builtin_ctzll(wp);
+        whitePawnsOnFile[sq % 8]++;
+        wp &= wp - 1;
+    }
+    Bitboard bp = blackPawns;
+    while (bp) {
+        int sq = __builtin_ctzll(bp);
+        blackPawnsOnFile[sq % 8]++;
+        bp &= bp - 1;
+    }
+    
+    for (int f = 0; f < 8; f++) {
+        if (whitePawnsOnFile[f] > 1) {
+            mgScore -= (whitePawnsOnFile[f] - 1) * 50;
+            egScore -= (whitePawnsOnFile[f] - 1) * 50;
+        }
+        if (blackPawnsOnFile[f] > 1) {
+            mgScore += (blackPawnsOnFile[f] - 1) * 50;
+            egScore += (blackPawnsOnFile[f] - 1) * 50;
         }
     }
     
-    // Second pass: evaluate
-    for (int y = 0; y < 8; y++) {
-        if (whitePawnsOnFile[y] > 1) {
-            mgScore -= (whitePawnsOnFile[y] - 1) * 50;
-            egScore -= (whitePawnsOnFile[y] - 1) * 50;
+    wp = whitePawns;
+    while (wp) {
+        int sq = __builtin_ctzll(wp);
+        int r = sq / 8;
+        int f = sq % 8;
+        if (whitePawnsOnFile[f] == 1) {
+            bool isolated = true;
+            if (f > 0 && whitePawnsOnFile[f-1] > 0) isolated = false;
+            if (f < 7 && whitePawnsOnFile[f+1] > 0) isolated = false;
+            if (isolated) { mgScore -= 20; egScore -= 20; }
         }
-        if (blackPawnsOnFile[y] > 1) {
-            mgScore += (blackPawnsOnFile[y] - 1) * 50;
-            egScore += (blackPawnsOnFile[y] - 1) * 50;
-        }
-        
-        for (int x = 0; x < 8; x++) {
-            if (board[x][y].type != PAWN) continue;
-            
-            if (board[x][y].color == WHITE) {
-                // Isolated pawn (only penalize if not doubled, to match original behavior)
-                if (whitePawnsOnFile[y] == 1) {
-                    bool isolated = true;
-                    if (y > 0 && whitePawnsOnFile[y-1] > 0) isolated = false;
-                    if (y < 7 && whitePawnsOnFile[y+1] > 0) isolated = false;
-                    if (isolated) { mgScore -= 20; egScore -= 20; }
-                }
-                
-                // Passed pawn
-                bool passed = true;
-                if (maxBlackPawnX[y] > x) passed = false;
-                if (y > 0 && maxBlackPawnX[y-1] > x) passed = false;
-                if (y < 7 && maxBlackPawnX[y+1] > x) passed = false;
-                
-                if (passed) {
-                    int bonus = 20 + (x - 1) * 10;
-                    mgScore += bonus;
-                    egScore += bonus * 2;
-                }
-            } else {
-                // Isolated pawn (only penalize if not doubled)
-                if (blackPawnsOnFile[y] == 1) {
-                    bool isolated = true;
-                    if (y > 0 && blackPawnsOnFile[y-1] > 0) isolated = false;
-                    if (y < 7 && blackPawnsOnFile[y+1] > 0) isolated = false;
-                    if (isolated) { mgScore += 20; egScore += 20; }
-                }
-                
-                // Passed pawn
-                bool passed = true;
-                if (minWhitePawnX[y] < x) passed = false;
-                if (y > 0 && minWhitePawnX[y-1] < x) passed = false;
-                if (y < 7 && minWhitePawnX[y+1] < x) passed = false;
-                
-                if (passed) {
-                    int bonus = 20 + (6 - x) * 10;
-                    mgScore -= bonus;
-                    egScore -= bonus * 2;
-                }
+        bool passed = true;
+        for (int checkR = r + 1; checkR < 8 && passed; checkR++) {
+            for (int df = -1; df <= 1; df++) {
+                int cf = f + df;
+                if (cf >= 0 && cf < 8 && ((blackPawns >> (checkR * 8 + cf)) & 1)) { passed = false; break; }
             }
         }
+        if (passed) {
+            int bonus = 20 + (r - 1) * 10;
+            mgScore += bonus;
+            egScore += bonus * 2;
+        }
+        wp &= wp - 1;
+    }
+    
+    bp = blackPawns;
+    while (bp) {
+        int sq = __builtin_ctzll(bp);
+        int r = sq / 8;
+        int f = sq % 8;
+        if (blackPawnsOnFile[f] == 1) {
+            bool isolated = true;
+            if (f > 0 && blackPawnsOnFile[f-1] > 0) isolated = false;
+            if (f < 7 && blackPawnsOnFile[f+1] > 0) isolated = false;
+            if (isolated) { mgScore += 20; egScore += 20; }
+        }
+        bool passed = true;
+        for (int checkR = r - 1; checkR >= 0 && passed; checkR--) {
+            for (int df = -1; df <= 1; df++) {
+                int cf = f + df;
+                if (cf >= 0 && cf < 8 && ((whitePawns >> (checkR * 8 + cf)) & 1)) { passed = false; break; }
+            }
+        }
+        if (passed) {
+            int bonus = 20 + (6 - r) * 10;
+            mgScore -= bonus;
+            egScore -= bonus * 2;
+        }
+        bp &= bp - 1;
     }
     
     entry.key = gameState.pawnKey;
     entry.mgScore = mgScore;
     entry.egScore = egScore;
     entry.valid = true;
-    
-    return std::make_pair(mgScore, egScore);
+    return {mgScore, egScore};
 }
 
 int Board::evaluate() {
-    int mgScore = 0;
-    int egScore = 0;
-    int gamePhase = 0;
+    int mgScore = gameState.mgScore;
+    int egScore = gameState.egScore;
     
-    int whiteBishops = 0, blackBishops = 0;
+    int gamePhase = pieceCount[WHITE][KNIGHT] + pieceCount[BLACK][KNIGHT]
+                  + pieceCount[WHITE][BISHOP] + pieceCount[BLACK][BISHOP]
+                  + 2 * (pieceCount[WHITE][ROOK] + pieceCount[BLACK][ROOK])
+                  + 4 * (pieceCount[WHITE][QUEEN] + pieceCount[BLACK][QUEEN]);
+    if (gamePhase > 24) gamePhase = 24;
     
-    for (int x = 0; x < 8; ++x) {
-        for (int y = 0; y < 8; ++y) {
-            Piece p = board[x][y];
-            if (p.type == EMPTY) continue;
-            
-            int mgValue = MG_VALUE[p.type];
-            int egValue = EG_VALUE[p.type];
-            int mgPos = 0, egPos = 0;
-            int rank = (p.color == WHITE) ? 7 - x : x;
-            
-            switch (p.type) {
-                case PAWN:   
-                    mgPos = PAWN_MG[rank][y];
-                    egPos = PAWN_EG[rank][y];
-                    break;
-                case KNIGHT: 
-                    mgPos = KNIGHT_MG[rank][y];
-                    egPos = KNIGHT_EG[rank][y];
-                    gamePhase += 1;
-                    break;
-                case BISHOP: 
-                    mgPos = BISHOP_MG[rank][y];
-                    egPos = BISHOP_EG[rank][y];
-                    gamePhase += 1;
-                    if (p.color == WHITE) whiteBishops++;
-                    else blackBishops++;
-                    break;
-                case ROOK:   
-                    mgPos = ROOK_MG[rank][y];
-                    egPos = ROOK_EG[rank][y];
-                    gamePhase += 2;
-                    // Rook on open/semi-open file bonus
-                    {
-                        bool ownPawn = false, oppPawn = false;
-                        for (int rx = 0; rx < 8; rx++) {
-                            if (board[rx][y].type == PAWN) {
-                                if (board[rx][y].color == p.color) ownPawn = true;
-                                else oppPawn = true;
-                            }
-                        }
-                        if (!ownPawn && !oppPawn) { mgPos += 20; egPos += 20; }
-                        else if (!ownPawn) { mgPos += 10; egPos += 10; }
-                    }
-                    break;
-                case QUEEN:  
-                    mgPos = QUEEN_MG[rank][y];
-                    egPos = QUEEN_EG[rank][y];
-                    gamePhase += 4;
-                    break;
-                case KING:   
-                    mgPos = KING_MG[rank][y];
-                    egPos = KING_EG[rank][y];
-                    break;
-                case EMPTY: break;
-            }
-            
-            int mgTotal = mgValue + mgPos;
-            int egTotal = egValue + egPos;
-            
-            if (p.color == WHITE) {
-                mgScore += mgTotal;
-                egScore += egTotal;
-            } else {
-                mgScore -= mgTotal;
-                egScore -= egTotal;
-            }
-        }
+    if (pieceCount[WHITE][BISHOP] >= 2) { mgScore += 30; egScore += 30; }
+    if (pieceCount[BLACK][BISHOP] >= 2) { mgScore -= 30; egScore -= 30; }
+    
+    Bitboard whiteRooks = pieces[ROOK] & colors[WHITE];
+    while (whiteRooks) {
+        int sq = __builtin_ctzll(whiteRooks);
+        int f = sq % 8;
+        Bitboard fileMask = 0x0101010101010101ULL << f;
+        bool ownPawn = (pieces[PAWN] & colors[WHITE] & fileMask) != 0;
+        bool oppPawn = (pieces[PAWN] & colors[BLACK] & fileMask) != 0;
+        if (!ownPawn && !oppPawn) { mgScore += 20; egScore += 20; }
+        else if (!ownPawn) { mgScore += 10; egScore += 10; }
+        whiteRooks &= whiteRooks - 1;
     }
     
-    // Bishop pair bonus
-    if (whiteBishops >= 2) { mgScore += 30; egScore += 30; }
-    if (blackBishops >= 2) { mgScore -= 30; egScore -= 30; }
+    Bitboard blackRooks = pieces[ROOK] & colors[BLACK];
+    while (blackRooks) {
+        int sq = __builtin_ctzll(blackRooks);
+        int f = sq % 8;
+        Bitboard fileMask = 0x0101010101010101ULL << f;
+        bool ownPawn = (pieces[PAWN] & colors[BLACK] & fileMask) != 0;
+        bool oppPawn = (pieces[PAWN] & colors[WHITE] & fileMask) != 0;
+        if (!ownPawn && !oppPawn) { mgScore -= 20; egScore -= 20; }
+        else if (!ownPawn) { mgScore -= 10; egScore -= 10; }
+        blackRooks &= blackRooks - 1;
+    }
     
-    // Development penalties: pieces still on starting squares block development
-    // White minor pieces on back rank
-    if (board[0][1].type == KNIGHT && board[0][1].color == WHITE) mgScore -= 15;
-    if (board[0][6].type == KNIGHT && board[0][6].color == WHITE) mgScore -= 15;
-    if (board[0][2].type == BISHOP && board[0][2].color == WHITE) mgScore -= 15;
-    if (board[0][5].type == BISHOP && board[0][5].color == WHITE) mgScore -= 15;
-    // Black minor pieces on back rank
-    if (board[7][1].type == KNIGHT && board[7][1].color == BLACK) mgScore += 15;
-    if (board[7][6].type == KNIGHT && board[7][6].color == BLACK) mgScore += 15;
-    if (board[7][2].type == BISHOP && board[7][2].color == BLACK) mgScore += 15;
-    if (board[7][5].type == BISHOP && board[7][5].color == BLACK) mgScore += 15;
+    if (pieceList[1].type == KNIGHT && pieceList[1].color == WHITE) mgScore -= 15;
+    if (pieceList[6].type == KNIGHT && pieceList[6].color == WHITE) mgScore -= 15;
+    if (pieceList[2].type == BISHOP && pieceList[2].color == WHITE) mgScore -= 15;
+    if (pieceList[5].type == BISHOP && pieceList[5].color == WHITE) mgScore -= 15;
+    if (pieceList[57].type == KNIGHT && pieceList[57].color == BLACK) mgScore += 15;
+    if (pieceList[62].type == KNIGHT && pieceList[62].color == BLACK) mgScore += 15;
+    if (pieceList[58].type == BISHOP && pieceList[58].color == BLACK) mgScore += 15;
+    if (pieceList[61].type == BISHOP && pieceList[61].color == BLACK) mgScore += 15;
     
-    // Castling bonus: reward having castled (king on g1/c1 or g8/c8)
-    // Penalty for losing castling rights without castling
     if (!gameState.whiteCanCastleKingside && !gameState.whiteCanCastleQueenside) {
-        // White can no longer castle - check if king is safely castled
-        if (board[0][6].type == KING && board[0][6].color == WHITE) mgScore += 30; // castled kingside
-        else if (board[0][2].type == KING && board[0][2].color == WHITE) mgScore += 30; // castled queenside
+        if (pieceList[6].type == KING && pieceList[6].color == WHITE) mgScore += 30;
+        else if (pieceList[2].type == KING && pieceList[2].color == WHITE) mgScore += 30;
     }
     if (!gameState.blackCanCastleKingside && !gameState.blackCanCastleQueenside) {
-        if (board[7][6].type == KING && board[7][6].color == BLACK) mgScore -= 30;
-        else if (board[7][2].type == KING && board[7][2].color == BLACK) mgScore -= 30;
+        if (pieceList[62].type == KING && pieceList[62].color == BLACK) mgScore -= 30;
+        else if (pieceList[58].type == KING && pieceList[58].color == BLACK) mgScore -= 30;
     }
     
-    // King Safety (Midgame only)
-    std::pair<int, int> whiteKing = findKing(WHITE);
-    std::pair<int, int> blackKing = findKing(BLACK);
+    int wkf = kingPos[WHITE].second;
+    int bkf = kingPos[BLACK].second;
     
-    // White King Safety
-    if (whiteKing.second >= 5) { // Kingside (f, g, h files)
+    if (wkf >= 5) {
         int penalty = 0;
-        if (board[1][5].type != PAWN || board[1][5].color != WHITE) penalty += 15; // f2
-        if (board[1][6].type != PAWN || board[1][6].color != WHITE) penalty += 20; // g2
-        if (board[1][7].type != PAWN || board[1][7].color != WHITE) penalty += 15; // h2
-        if (board[2][6].type == PAWN && board[2][6].color == WHITE) penalty -= 10; // g3 is okay
+        if (pieceList[13].type != PAWN || pieceList[13].color != WHITE) penalty += 15;
+        if (pieceList[14].type != PAWN || pieceList[14].color != WHITE) penalty += 20;
+        if (pieceList[15].type != PAWN || pieceList[15].color != WHITE) penalty += 15;
+        if (pieceList[22].type == PAWN && pieceList[22].color == WHITE) penalty -= 10;
         mgScore -= penalty;
-    } else if (whiteKing.second <= 2) { // Queenside (a, b, c files)
+    } else if (wkf <= 2) {
         int penalty = 0;
-        if (board[1][0].type != PAWN || board[1][0].color != WHITE) penalty += 10; // a2
-        if (board[1][1].type != PAWN || board[1][1].color != WHITE) penalty += 15; // b2
-        if (board[1][2].type != PAWN || board[1][2].color != WHITE) penalty += 15; // c2
+        if (pieceList[8].type != PAWN || pieceList[8].color != WHITE) penalty += 10;
+        if (pieceList[9].type != PAWN || pieceList[9].color != WHITE) penalty += 15;
+        if (pieceList[10].type != PAWN || pieceList[10].color != WHITE) penalty += 15;
         mgScore -= penalty;
     } else {
-        mgScore -= 30; // King in center
+        mgScore -= 30;
     }
     
-    // Black King Safety
-    if (blackKing.second >= 5) { // Kingside
+    if (bkf >= 5) {
         int penalty = 0;
-        if (board[6][5].type != PAWN || board[6][5].color != BLACK) penalty += 15; // f7
-        if (board[6][6].type != PAWN || board[6][6].color != BLACK) penalty += 20; // g7
-        if (board[6][7].type != PAWN || board[6][7].color != BLACK) penalty += 15; // h7
-        if (board[5][6].type == PAWN && board[5][6].color == BLACK) penalty -= 10; // g6 is okay
-        mgScore += penalty; // positive score is bad for black
-    } else if (blackKing.second <= 2) { // Queenside
+        if (pieceList[53].type != PAWN || pieceList[53].color != BLACK) penalty += 15;
+        if (pieceList[54].type != PAWN || pieceList[54].color != BLACK) penalty += 20;
+        if (pieceList[55].type != PAWN || pieceList[55].color != BLACK) penalty += 15;
+        if (pieceList[46].type == PAWN && pieceList[46].color == BLACK) penalty -= 10;
+        mgScore += penalty;
+    } else if (bkf <= 2) {
         int penalty = 0;
-        if (board[6][0].type != PAWN || board[6][0].color != BLACK) penalty += 10; // a7
-        if (board[6][1].type != PAWN || board[6][1].color != BLACK) penalty += 15; // b7
-        if (board[6][2].type != PAWN || board[6][2].color != BLACK) penalty += 15; // c7
+        if (pieceList[48].type != PAWN || pieceList[48].color != BLACK) penalty += 10;
+        if (pieceList[49].type != PAWN || pieceList[49].color != BLACK) penalty += 15;
+        if (pieceList[50].type != PAWN || pieceList[50].color != BLACK) penalty += 15;
         mgScore += penalty;
     } else {
-        mgScore += 30; // King in center
+        mgScore += 30;
     }
     
     std::pair<int, int> pawnStructScore = evaluatePawnStructure();
     mgScore += pawnStructScore.first;
     egScore += pawnStructScore.second;
     
-    // Mobility evaluation removed: Profiler showed it took 35% of CPU time, 
-    // tanking NPS. PSQTs already cover 90% of mobility rewards.
-    
-    // Tapered Eval Interpolation
-    // gamePhase max is 24 (4 knights=4, 4 bishops=4, 4 rooks=8, 2 queens=8)
-    if (gamePhase > 24) gamePhase = 24;
-    int phase = gamePhase;
-    int score = (mgScore * phase + egScore * (24 - phase)) / 24;
+    int score = (mgScore * gamePhase + egScore * (24 - gamePhase)) / 24;
     
     return score;
+}
+
+void Board::printBoard() {
+    // Simple print for debug
 }

@@ -342,24 +342,31 @@ int ChessAI::quiescence(Board& board, int ply, int alpha, int beta, Color curren
     Board::MoveList allMoves;
     board.generateMoves(currentTurn, allMoves);
     
-    std::vector<std::pair<int, Move>> scoredMoves;
+    Move qMoves[256];
+    int qScores[256];
+    int numMoves = 0;
     
-    for (const Move& m : allMoves) {
-        // If in check, consider ALL moves. If not, only captures/promotions.
+    Move dummyTT(0,0,0,0);
+    for (int i = 0; i < allMoves.size(); i++) {
+        const Move& m = allMoves[i];
         if (inCheck || board.getPiece(m.toX, m.toY).type != EMPTY || m.promotion != EMPTY) {
-            Move dummyTT;
-            scoredMoves.push_back({scoreMove(m, dummyTT, board, 100, currentTurn), m});
+            qMoves[numMoves] = m;
+            qScores[numMoves] = scoreMove(m, dummyTT, board, 100, currentTurn);
+            numMoves++;
         }
     }
 
-    std::sort(scoredMoves.begin(), scoredMoves.end(), [](const std::pair<int, Move>& a, const std::pair<int, Move>& b) {
-        return a.first > b.first;
-    });
-
     int legalMovesCount = 0;
 
-    for (const auto& pair : scoredMoves) {
-        const Move& move = pair.second;
+    for (int i = 0; i < numMoves; i++) {
+        int bestIdx = i;
+        for (int j = i + 1; j < numMoves; j++) {
+            if (qScores[j] > qScores[bestIdx]) bestIdx = j;
+        }
+        std::swap(qMoves[i], qMoves[bestIdx]);
+        std::swap(qScores[i], qScores[bestIdx]);
+        
+        const Move& move = qMoves[i];
         GameState prevState = board.gameState;
         Piece captured = board.getPiece(move.toX, move.toY);
         board.makeMove(move);
