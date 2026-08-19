@@ -123,7 +123,12 @@ int ChessAI::negamax(Board& board, int depth, int ply, int alpha, int beta, Colo
     Move ttMove(0,0,0,0);
     
     if (tt.probe(hashKey, depth, alpha, beta, ttScore, ttMove)) {
+        if (ttScore > 9000) ttScore -= ply;
+        else if (ttScore < -9000) ttScore += ply;
         return ttScore;
+    }
+    if (ply > 0 && board.isRepetition()) {
+        return 0;
     }
     
     // Cap maximum search depth to prevent stack overflow from runaway check extensions
@@ -242,7 +247,10 @@ int ChessAI::negamax(Board& board, int depth, int ply, int alpha, int beta, Colo
     else if (maxEval >= beta) bound = LOWER_BOUND;
     
     if (!timeOut) {
-        tt.store(hashKey, depth, maxEval, bound, bestMoveForTT);
+        int ttStoreScore = maxEval;
+        if (ttStoreScore > 9000) ttStoreScore += ply;
+        else if (ttStoreScore < -9000) ttStoreScore -= ply;
+        tt.store(hashKey, depth, ttStoreScore, bound, bestMoveForTT);
     }
     
     return maxEval;
@@ -259,28 +267,37 @@ int ChessAI::quiescence(Board& board, int alpha, int beta, Color currentTurn) {
     if (timeOut) return 0;
     nodesExplored++;
 
-    int standPat = board.evaluate();
-    if (currentTurn == BLACK) standPat = -standPat;
+    bool inCheck = board.isInCheck(currentTurn);
+    int standPat = -10000;
     
-    if (standPat >= beta) return beta;
-    if (alpha < standPat) alpha = standPat;
+    if (!inCheck) {
+        standPat = board.evaluate();
+        if (currentTurn == BLACK) standPat = -standPat;
+        if (standPat >= beta) return beta;
+        if (alpha < standPat) alpha = standPat;
+    }
 
     std::vector<Move> allMoves = board.generateLegalMoves(currentTurn);
-    std::vector<std::pair<int, Move>> scoredCaptures;
+    if (allMoves.empty()) {
+        if (inCheck) return -10000; // Checkmate
+        return 0; // Stalemate
+    }
+    
+    std::vector<std::pair<int, Move>> scoredMoves;
     
     for (const Move& m : allMoves) {
-        // Only consider captures and promotions in Q-Search
-        if (board.getPiece(m.toX, m.toY).type != EMPTY || m.promotion != EMPTY) {
+        // If in check, consider ALL moves. If not, only captures/promotions.
+        if (inCheck || board.getPiece(m.toX, m.toY).type != EMPTY || m.promotion != EMPTY) {
             Move dummyTT;
-            scoredCaptures.push_back({scoreMove(m, dummyTT, board, 100, currentTurn), m});
+            scoredMoves.push_back({scoreMove(m, dummyTT, board, 100, currentTurn), m});
         }
     }
 
-    std::sort(scoredCaptures.begin(), scoredCaptures.end(), [](const std::pair<int, Move>& a, const std::pair<int, Move>& b) {
+    std::sort(scoredMoves.begin(), scoredMoves.end(), [](const std::pair<int, Move>& a, const std::pair<int, Move>& b) {
         return a.first > b.first;
     });
 
-    for (const auto& pair : scoredCaptures) {
+    for (const auto& pair : scoredMoves) {
         const Move& move = pair.second;
         GameState prevState = board.gameState;
         Piece captured = board.getPiece(move.toX, move.toY);

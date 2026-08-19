@@ -173,6 +173,9 @@ void Board::setupBoard() {
     gameState.enPassantY = -1;
     
     gameState.zobristKey = Zobrist::computeHash(*this, WHITE);
+    
+    historyPly = 0;
+    history[historyPly++] = gameState.zobristKey;
 }
 
 Color Board::loadFEN(const std::string& fen) {
@@ -251,6 +254,10 @@ Color Board::loadFEN(const std::string& fen) {
     }
     
     gameState.zobristKey = Zobrist::computeHash(*this, activeColor);
+    
+    historyPly = 0;
+    history[historyPly++] = gameState.zobristKey;
+    
     return activeColor;
 }
 
@@ -351,6 +358,9 @@ bool Board::isInCheck(Color color) const {
 }
 
 void Board::makeMove(const Move& m) {
+    if (historyPly < 1024) {
+        history[historyPly++] = gameState.zobristKey;
+    }
     Piece movingPiece = board[m.fromX][m.fromY];
     
     int oldCastle = 0;
@@ -446,6 +456,9 @@ void Board::undoMove(const Move& m, const Piece& captured, const GameState& prev
     }
     
     gameState = prevState;
+    if (historyPly > 0) {
+        historyPly--;
+    }
 }
 
 void Board::updateGameState(const Move& m, const Piece& movingPiece) {
@@ -688,6 +701,19 @@ bool Board::isCheckmate(Color color) {
 
 bool Board::isStalemate(Color color) {
     return !isInCheck(color) && generateLegalMoves(color).empty();
+}
+
+bool Board::isRepetition() const {
+    if (historyPly < 4) return false;
+    int repetitions = 0;
+    // We only need to check every 2 plies (same side to move)
+    for (int i = historyPly - 4; i >= 0; i -= 2) {
+        if (history[i] == gameState.zobristKey) {
+            repetitions++;
+            if (repetitions >= 1) return true; // 2-fold repetition is enough to score a draw in search
+        }
+    }
+    return false;
 }
 
 bool Board::isDraw() {

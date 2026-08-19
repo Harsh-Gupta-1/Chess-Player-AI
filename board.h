@@ -29,8 +29,11 @@ private:
 
 public:
     GameState gameState;
+    unsigned long long history[1024];
+    int historyPly;
 
     Board();
+    bool isRepetition() const;
     void setupBoard();
     Color loadFEN(const std::string& fen);
     void printBoard();
