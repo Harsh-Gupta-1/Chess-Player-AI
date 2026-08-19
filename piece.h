@@ -30,10 +30,11 @@ struct GameState {
     bool blackCanCastleQueenside;
     int enPassantX, enPassantY;
     bool hasEnPassant;
+    unsigned long long zobristKey;
     
     GameState() : whiteCanCastleKingside(true), whiteCanCastleQueenside(true),
                   blackCanCastleKingside(true), blackCanCastleQueenside(true),
-                  enPassantX(-1), enPassantY(-1), hasEnPassant(false) {}
+                  enPassantX(-1), enPassantY(-1), hasEnPassant(false), zobristKey(0) {}
 };
 
 #endif // PIECE_H

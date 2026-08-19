@@ -8,6 +8,7 @@ A simple command-line chess AI implemented in C++ using the minimax algorithm wi
 - **Minimax with Alpha-Beta Pruning**: The AI uses a depth-limited minimax algorithm with alpha-beta pruning for move selection.
 - **Board Evaluation**: Evaluates positions based on material, piece-square tables, mobility, and pawn structure.
 - **Move Generation**: Supports all legal chess moves, including castling, en passant, and promotions.
+- **Transposition Table (TT)**: Uses Zobrist Hashing to cache previously evaluated positions and prune redundant search branches.
 - **PERFT Testing**: Verifies move generation correctness by counting leaf nodes at given depths for standardized FEN positions.
 - **Benchmarking**: Measures search nodes, search time, and Nodes Per Second (NPS) across standardized benchmark positions.
 - **Standard Chess Rules**: Fully implements chess rules, including check, checkmate, stalemate, and draw conditions.

@@ -3,6 +3,7 @@
 #include <algorithm>
 
 Move ChessAI::getBestMove(Board& board, Color aiColor, int depth) {
+    tt.clear();
     nodesExplored = 0;
     int bestScore = (aiColor == WHITE) ? std::numeric_limits<int>::min() : std::numeric_limits<int>::max();
     Move bestMove(0, 0, 0, 0);
@@ -31,6 +32,16 @@ Move ChessAI::getBestMove(Board& board, Color aiColor, int depth) {
 
 int ChessAI::minimax(Board& board, int depth, int alpha, int beta, Color currentTurn, bool maximizing) {
     nodesExplored++;
+    
+    int originalAlpha = alpha;
+    unsigned long long hashKey = Zobrist::computeHash(board, currentTurn);
+    int ttScore;
+    Move ttMove(0,0,0,0);
+    
+    if (tt.probe(hashKey, depth, alpha, beta, ttScore, ttMove)) {
+        return ttScore;
+    }
+    
     if (depth == 0) return board.evaluate();
     
     if (board.isCheckmate(currentTurn)) {
@@ -44,6 +55,7 @@ int ChessAI::minimax(Board& board, int depth, int alpha, int beta, Color current
     std::vector<Move> moves = board.generateLegalMoves(currentTurn);
     
     if (maximizing) {
+        Move bestMoveForTT(0,0,0,0);
         int maxEval = std::numeric_limits<int>::min();
         for (const auto& move : moves) {
             GameState prevState = board.gameState;
@@ -57,10 +69,19 @@ int ChessAI::minimax(Board& board, int depth, int alpha, int beta, Color current
             
             maxEval = std::max(maxEval, eval);
             alpha = std::max(alpha, eval);
+            if (alpha > originalAlpha) bestMoveForTT = move;
             if (beta <= alpha) break;
         }
+        
+        Bound bound = EXACT;
+        if (maxEval <= originalAlpha) bound = UPPER_BOUND;
+        else if (maxEval >= beta) bound = LOWER_BOUND;
+        tt.store(hashKey, depth, maxEval, bound, bestMoveForTT);
+        
         return maxEval;
     } else {
+        Move bestMoveForTT(0,0,0,0);
+        int originalBeta = beta;
         int minEval = std::numeric_limits<int>::max();
         for (const auto& move : moves) {
             GameState prevState = board.gameState;
@@ -74,8 +95,15 @@ int ChessAI::minimax(Board& board, int depth, int alpha, int beta, Color current
             
             minEval = std::min(minEval, eval);
             beta = std::min(beta, eval);
+            if (beta < originalBeta) bestMoveForTT = move;
             if (beta <= alpha) break;
         }
+        
+        Bound bound = EXACT;
+        if (minEval <= alpha) bound = UPPER_BOUND;
+        else if (minEval >= originalBeta) bound = LOWER_BOUND;
+        tt.store(hashKey, depth, minEval, bound, bestMoveForTT);
+        
         return minEval;
     }
 }
