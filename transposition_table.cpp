@@ -4,7 +4,9 @@
 TranspositionTable::TranspositionTable(int numEntries) {
     size = numEntries;
     table = new TTEntry[size];
-    std::memset(table, 0, sizeof(TTEntry) * size);
+    for(int i=0; i<size; i++) {
+        table[i] = TTEntry();
+    }
 }
 
 TranspositionTable::~TranspositionTable() {
@@ -12,7 +14,9 @@ TranspositionTable::~TranspositionTable() {
 }
 
 void TranspositionTable::clear() {
-    std::memset(table, 0, sizeof(TTEntry) * size);
+    for(int i=0; i<size; i++) {
+        table[i] = TTEntry();
+    }
 }
 
 void TranspositionTable::store(unsigned long long key, int depth, int score, Bound bound, Move bestMove) {

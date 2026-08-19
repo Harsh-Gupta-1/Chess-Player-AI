@@ -492,6 +492,8 @@ std::vector<Move> Board::generateMoves(Color color) {
             if (p.type == EMPTY || p.color != color) continue;
 
             switch (p.type) {
+                case EMPTY:
+                    break;
                 case PAWN:
                     generatePawnMoves(x, y, color, moves);
                     break;
