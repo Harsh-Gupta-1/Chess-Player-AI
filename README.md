@@ -8,7 +8,8 @@ A simple command-line chess AI implemented in C++ using the minimax algorithm wi
 - **Minimax with Alpha-Beta Pruning**: The AI uses a depth-limited minimax algorithm with alpha-beta pruning for move selection.
 - **Board Evaluation**: Evaluates positions based on material, piece-square tables, mobility, and pawn structure.
 - **Move Generation**: Supports all legal chess moves, including castling, en passant, and promotions.
-- **Benchmarking**: Measures average time and nodes explored per move at various depths to assess performance.
+- **PERFT Testing**: Verifies move generation correctness by counting leaf nodes at given depths for standardized FEN positions.
+- **Benchmarking**: Measures search nodes, search time, and Nodes Per Second (NPS) across standardized benchmark positions.
 - **Standard Chess Rules**: Fully implements chess rules, including check, checkmate, stalemate, and draw conditions.
 
 ## Installation
@@ -29,7 +30,7 @@ A simple command-line chess AI implemented in C++ using the minimax algorithm wi
 
 2. Compile the code:
    ```bash
-   g++ -std=c++11 main.cpp board.cpp chess_ai.cpp game.cpp benchmark.cpp -o chess
+   g++ -std=c++11 main.cpp board.cpp chess_ai.cpp game.cpp benchmark.cpp perft.cpp -o chess
    ```
 
 3. Run the executable:
@@ -56,36 +57,30 @@ A simple command-line chess AI implemented in C++ using the minimax algorithm wi
 
 6. The game ends with checkmate, stalemate, or a draw.
 
-### Running the Benchmark
+### Running Tests & Benchmarks
 
-To evaluate the AI's performance, uncomment the `benchmark();` call in `main.cpp`:
+You can run the engine in different modes using command-line arguments:
 
-```cpp
-int main() {
-    benchmark(); // Uncomment this line
-    std::cout << "Starting a new game..." << std::endl;
-    Game g;
-    g.play();
-    return 0;
-}
-```
+1. **PERFT Suite** (tests move generation correctness):
+   ```bash
+   ./chess perft
+   ```
 
-Recompile and run:
-```bash
-make
-./chess
-```
+2. **Benchmark Suite** (tests search speed and efficiency):
+   ```bash
+   ./chess bench
+   ```
 
-The benchmark outputs average time and nodes explored per move for depths 1 to 4, helping assess search efficiency.
-
+The benchmark tests specific standardized positions (e.g., Kiwipete) and reports Nodes Per Second (NPS).
 ## File Structure
 
 - `piece.h`: Defines Piece, Move, and GameState structs for chess pieces and moves.
 - `board.h` and `board.cpp`: Implements the Board class for game state, move generation, and evaluation.
 - `chess_ai.h` and `chess_ai.cpp`: Implements the ChessAI class with minimax and alpha-beta pruning.
 - `game.h` and `game.cpp`: Implements the Game class for managing gameplay and user interaction.
-- `benchmark.h` and `benchmark.cpp`: Implements the benchmark function for performance testing.
-- `main.cpp`: Entry point, initializes the game or benchmark.
+- `benchmark.h` and `benchmark.cpp`: Standardized benchmarking for search speed and efficiency (NPS).
+- `perft.h` and `perft.cpp`: Performance test framework for move generation validation.
+- `main.cpp`: Entry point, parses command-line arguments to run game, perft, or benchmark.
 - `Makefile`: Simplifies compilation.
 
 ## Extensibility
