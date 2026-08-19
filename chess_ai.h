@@ -53,9 +53,9 @@ public:
     }
     
     Move getBestMove(Board& board, Color aiColor, int maxDepth);
+    int negamax(Board& board, int depth, int ply, int alpha, int beta, Color currentTurn, bool allowNull);
 
 private:
-    int negamax(Board& board, int depth, int ply, int alpha, int beta, Color currentTurn, bool allowNull);
     int quiescence(Board& board, int ply, int alpha, int beta, Color currentTurn);
     int scoreMove(const Move& move, const Move& ttMove, const Board& board, int ply, Color currentTurn);
 };

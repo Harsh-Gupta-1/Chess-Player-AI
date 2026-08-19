@@ -27,3 +27,13 @@ if %ERRORLEVEL% equ 0 (
 ) else (
     echo Compilation failed.
 )
+
+echo.
+echo Compiling Search Correctness Tests...
+g++ -std=c++11 -O3 -march=native -flto -Wall -Wextra test_search_correctness.cpp board.cpp chess_ai.cpp game.cpp zobrist.cpp transposition_table.cpp uci.cpp -o test_search_correctness.exe
+if %ERRORLEVEL% equ 0 (
+    echo Compilation successful. Running Correctness Tests...
+    .\test_search_correctness.exe
+) else (
+    echo Compilation failed.
+)

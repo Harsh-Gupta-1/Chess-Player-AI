@@ -46,6 +46,11 @@ Move ChessAI::getBestMove(Board& board, Color aiColor, int maxDepth) {
 
     Move bestMove(0, 0, 0, 0);
 
+    std::vector<Move> initialLegalMoves = board.generateLegalMoves(aiColor);
+    if (initialLegalMoves.empty()) {
+        return bestMove; // Terminal state at root
+    }
+
     for (int depth = 1; depth <= maxDepth; depth++) {
         int alpha = std::numeric_limits<int>::min() + 1;
         int beta = std::numeric_limits<int>::max() - 1;
@@ -150,7 +155,7 @@ int ChessAI::negamax(Board& board, int depth, int ply, int alpha, int beta, Colo
     
     // Null Move Pruning: if we can pass our turn and still get a beta cutoff,
     // the position is so good we can prune it.
-    if (enableNullMove && allowNull && depth >= 3 && !inCheck) {
+    if (enableNullMove && allowNull && depth >= 3 && !inCheck && board.hasNonPawnMaterial(currentTurn)) {
         // Make null move: just flip side to move via Zobrist
         GameState prevState = board.gameState;
         board.gameState.zobristKey ^= Zobrist::sideKey;
@@ -211,8 +216,10 @@ int ChessAI::negamax(Board& board, int depth, int ply, int alpha, int beta, Colo
         bool isCapture = (captured.type != EMPTY);
         bool isTactical = isCapture || move.promotion != EMPTY;
         bool givesCheck = board.isInCheck(currentTurn == WHITE ? BLACK : WHITE);
+        bool isKiller = (ply < 100) && (isSameMove(move, killerMoves[ply][0]) || isSameMove(move, killerMoves[ply][1]));
+        
         int reduction = 0;
-        if (enableLMR && depth >= 3 && !inCheck && !isTactical && !givesCheck && moveCount > 4) {
+        if (enableLMR && depth >= 3 && !inCheck && !isTactical && !givesCheck && !isKiller && moveCount > 4) {
             reduction = 1;
             if (moveCount > 6) reduction = 2;
         }

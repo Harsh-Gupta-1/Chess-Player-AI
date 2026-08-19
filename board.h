@@ -57,6 +57,7 @@ public:
     std::vector<Move> generateLegalMoves(Color color);
     bool isCheckmate(Color color);
     bool isStalemate(Color color);
+    bool hasNonPawnMaterial(Color color) const;
     int evaluate();
 };
 

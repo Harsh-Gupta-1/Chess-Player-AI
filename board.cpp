@@ -740,6 +740,20 @@ bool Board::isStalemate(Color color) {
     return !isInCheck(color) && generateLegalMoves(color).empty();
 }
 
+bool Board::hasNonPawnMaterial(Color color) const {
+    for (int x = 0; x < 8; x++) {
+        for (int y = 0; y < 8; y++) {
+            if (board[x][y].color == color && 
+                board[x][y].type != EMPTY && 
+                board[x][y].type != PAWN && 
+                board[x][y].type != KING) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 bool Board::isRepetition() const {
     if (historyPly < 4) return false;
     int limit = std::max(0, historyPly - gameState.halfmoveClock);
