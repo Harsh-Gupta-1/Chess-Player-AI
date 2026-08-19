@@ -14,6 +14,8 @@ struct BenchmarkPosition {
 
 void benchmark() {
     ChessAI ai;
+    ai.timeLimitMs = 1000000; // Disable time limit for benchmark testing
+    
     std::vector<BenchmarkPosition> positions = {
         {"Start Position", "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"},
         {"Kiwipete", "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1"},

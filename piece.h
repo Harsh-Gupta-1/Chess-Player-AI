@@ -19,6 +19,7 @@ struct Move {
     bool isEnPassant;
     bool isCastle;
     
+    Move() : fromX(0), fromY(0), toX(0), toY(0), promotion(EMPTY), isEnPassant(false), isCastle(false) {}
     Move(int fx, int fy, int tx, int ty, PieceType prom = EMPTY, bool enPass = false, bool castle = false) 
         : fromX(fx), fromY(fy), toX(tx), toY(ty), promotion(prom), isEnPassant(enPass), isCastle(castle) {}
 };
