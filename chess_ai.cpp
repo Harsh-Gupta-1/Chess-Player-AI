@@ -16,8 +16,8 @@ int ChessAI::scoreMove(const Move& move, const Move& ttMove, const Board& board,
     if (captured.type != EMPTY) {
         Piece moving = board.getPiece(move.fromX, move.fromY);
         // MVV-LVA: Most Valuable Victim - Least Valuable Attacker
-        // type: PAWN=1, KNIGHT=2, BISHOP=3, ROOK=4, QUEEN=5, KING=6
-        return 1000000 + 10 * captured.type - moving.type;
+        // Multiply by 100 to ensure victim type strictly dominates attacker penalty
+        return 1000000 + 100 * captured.type - moving.type;
     }
 
     if (move.promotion != EMPTY) {
@@ -29,7 +29,10 @@ int ChessAI::scoreMove(const Move& move, const Move& ttMove, const Board& board,
         if (enableKiller && isSameMove(move, killerMoves[ply][1])) return 700000;
     }
     
-    if (enableHistory) return historyMoves[currentTurn][move.fromX * 8 + move.fromY][move.toX * 8 + move.toY];
+    if (enableHistory) {
+        // Cap history score to ensure it never overrides killer or tactical moves
+        return std::min(historyMoves[currentTurn][move.fromX * 8 + move.fromY][move.toX * 8 + move.toY], 600000);
+    }
     return 0;
 }
 
@@ -228,7 +231,9 @@ int ChessAI::negamax(Board& board, int depth, int ply, int alpha, int beta, Colo
         int reduction = 0;
         if (enableLMR && depth >= 3 && !inCheck && !isTactical && !givesCheck && !isKiller && moveCount > 4) {
             reduction = 1;
-            if (moveCount > 6) reduction = 2;
+            // Only aggressively reduce deeper searches or very late moves
+            if (depth > 4 && moveCount > 6) reduction = 2;
+            if (depth > 6 && moveCount > 12) reduction = 3;
         }
         
         if (moveCount == 1) {
