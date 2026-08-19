@@ -56,7 +56,7 @@ public:
 
 private:
     int negamax(Board& board, int depth, int ply, int alpha, int beta, Color currentTurn, bool allowNull);
-    int quiescence(Board& board, int alpha, int beta, Color currentTurn);
+    int quiescence(Board& board, int ply, int alpha, int beta, Color currentTurn);
     int scoreMove(const Move& move, const Move& ttMove, const Board& board, int ply, Color currentTurn);
 };
 

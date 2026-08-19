@@ -89,6 +89,7 @@ Move ChessAI::getBestMove(Board& board, Color aiColor, int maxDepth) {
         }
         
         if (timeOut && depth > 1) break; // Keep best move from previous depth if timed out
+        
         bestMove = currentBestMove;
         
         // UCI info output
@@ -128,10 +129,8 @@ int ChessAI::negamax(Board& board, int depth, int ply, int alpha, int beta, Colo
     int ttScore;
     Move ttMove(0,0,0,0);
     
-    if (tt.probe(hashKey, depth, alpha, beta, ttScore, ttMove)) {
+    if (tt.probe(hashKey, depth, ply, alpha, beta, ttScore, ttMove)) {
         stats.ttHits++;
-        if (ttScore > 9000) ttScore -= ply;
-        else if (ttScore < -9000) ttScore += ply;
         return ttScore;
     }
     if (ply > 0 && board.isRepetition()) {
@@ -140,7 +139,7 @@ int ChessAI::negamax(Board& board, int depth, int ply, int alpha, int beta, Colo
     
     // Cap maximum search depth to prevent stack overflow from runaway check extensions
     if (depth == 0 || ply >= 64) {
-        return quiescence(board, alpha, beta, currentTurn);
+        return quiescence(board, ply, alpha, beta, currentTurn);
     }
     
     bool inCheck = board.isInCheck(currentTurn);
@@ -253,8 +252,9 @@ int ChessAI::negamax(Board& board, int depth, int ply, int alpha, int beta, Colo
         }
     }
     
-    if (legalMovesCount == 0 && inCheck) {
-        return -10000 + ply;
+    if (legalMovesCount == 0) {
+        if (inCheck) return -10000 + ply;
+        return 0; // Stalemate
     }
     
     Bound bound = EXACT;
@@ -262,16 +262,13 @@ int ChessAI::negamax(Board& board, int depth, int ply, int alpha, int beta, Colo
     else if (maxEval >= beta) bound = LOWER_BOUND;
     
     if (!timeOut) {
-        int ttStoreScore = maxEval;
-        if (ttStoreScore > 9000) ttStoreScore += ply;
-        else if (ttStoreScore < -9000) ttStoreScore -= ply;
-        tt.store(hashKey, depth, ttStoreScore, bound, bestMoveForTT);
+        tt.store(hashKey, depth, ply, maxEval, bound, bestMoveForTT);
     }
     
     return maxEval;
 }
 
-int ChessAI::quiescence(Board& board, int alpha, int beta, Color currentTurn) {
+int ChessAI::quiescence(Board& board, int ply, int alpha, int beta, Color currentTurn) {
     if ((nodesExplored & 2047) == 0) {
         auto now = std::chrono::steady_clock::now();
         if (std::chrono::duration_cast<std::chrono::milliseconds>(now - startTime).count() >= timeLimitMs) {
@@ -323,7 +320,7 @@ int ChessAI::quiescence(Board& board, int alpha, int beta, Color currentTurn) {
         }
         
         legalMovesCount++;
-        int score = -quiescence(board, -beta, -alpha, currentTurn == WHITE ? BLACK : WHITE);
+        int score = -quiescence(board, ply + 1, -beta, -alpha, currentTurn == WHITE ? BLACK : WHITE);
         
         board.undoMove(move, captured, prevState);
         
@@ -334,7 +331,7 @@ int ChessAI::quiescence(Board& board, int alpha, int beta, Color currentTurn) {
     }
     
     if (legalMovesCount == 0 && inCheck) {
-        return -10000;
+        return -10000 + ply;
     }
     
     return alpha;
