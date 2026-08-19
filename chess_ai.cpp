@@ -105,6 +105,7 @@ Move ChessAI::getBestMove(Board& board, Color aiColor, int maxDepth) {
 }
 
 int ChessAI::negamax(Board& board, int depth, int ply, int alpha, int beta, Color currentTurn, bool allowNull) {
+    // Reverted back to 2048 to prevent huge syscall overhead on Windows
     if ((nodesExplored & 2047) == 0) {
         auto now = std::chrono::steady_clock::now();
         if (std::chrono::duration_cast<std::chrono::milliseconds>(now - startTime).count() >= timeLimitMs) {
@@ -125,7 +126,8 @@ int ChessAI::negamax(Board& board, int depth, int ply, int alpha, int beta, Colo
         return ttScore;
     }
     
-    if (depth == 0) {
+    // Cap maximum search depth to prevent stack overflow from runaway check extensions
+    if (depth == 0 || ply >= 64) {
         return quiescence(board, alpha, beta, currentTurn);
     }
     

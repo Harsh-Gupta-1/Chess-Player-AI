@@ -2,48 +2,139 @@
 #include "zobrist.h"
 #include <iostream>
 
-const int Board::PAWN_TABLE[8][8] = {
-    { 0,  0,  0,  0,  0,  0,  0,  0},
-    {50, 50, 50, 50, 50, 50, 50, 50},
-    {10, 10, 20, 30, 30, 20, 10, 10},
-    { 5,  5, 10, 25, 25, 10,  5,  5},
-    { 0,  0,  0, 20, 20,  0,  0,  0},
-    { 5, -5,-10,  0,  0,-10, -5,  5},
-    { 5, 10, 10,-20,-20, 10, 10,  5},
-    { 0,  0,  0,  0,  0,  0,  0,  0}
+const int Board::MG_VALUE[6] = { 0, 82, 337, 365, 477, 1025 };
+const int Board::EG_VALUE[6] = { 0, 94, 281, 297, 512,  936 };
+
+const int Board::PAWN_MG[8][8] = {
+    {  0,   0,   0,   0,   0,   0,   0,   0},
+    { 98, 134,  61,  95,  68, 126,  34, -11},
+    {-6,   7,  26,  31,  62,  11,   8, -24},
+    {-14,  13,   6,  21,  23,  12,  17, -23},
+    {-27,  -2,  -5,  12,  17,   6,  10, -25},
+    {-26,  -4,  -4, -10,   3,   3,  33, -12},
+    {-35,  -1, -20, -23, -15,  24,  38, -22},
+    {  0,   0,   0,   0,   0,   0,   0,   0}
 };
 
-const int Board::KNIGHT_TABLE[8][8] = {
-    {-50,-40,-30,-30,-30,-30,-40,-50},
-    {-40,-20,  0,  0,  0,  0,-20,-40},
-    {-30,  0, 10, 15, 15, 10,  0,-30},
-    {-30,  5, 15, 20, 20, 15,  5,-30},
-    {-30,  0, 15, 20, 20, 15,  0,-30},
-    {-30,  5, 10, 15, 15, 10,  5,-30},
-    {-40,-20,  0,  5,  5,  0,-20,-40},
-    {-50,-40,-30,-30,-30,-30,-40,-50}
+const int Board::PAWN_EG[8][8] = {
+    {  0,   0,   0,   0,   0,   0,   0,   0},
+    {178, 173, 158, 134, 147, 132, 165, 187},
+    { 94, 100,  85,  67,  56,  53,  82,  84},
+    { 32,  24,  13,   5,  -2,   4,  17,  17},
+    { 13,   9,  -3,  -7,  -7,  -8,   3,  -1},
+    {  4,   7,  -6,   1,   0,  -5,  -1,  -8},
+    { 13,   8,   8,  10,  13,   0,   2,  -7},
+    {  0,   0,   0,   0,   0,   0,   0,   0}
 };
 
-const int Board::BISHOP_TABLE[8][8] = {
-    {-20,-10,-10,-10,-10,-10,-10,-20},
-    {-10,  0,  0,  0,  0,  0,  0,-10},
-    {-10,  0,  5, 10, 10,  5,  0,-10},
-    {-10,  5,  5, 10, 10,  5,  5,-10},
-    {-10,  0, 10, 10, 10, 10,  0,-10},
-    {-10, 10, 10, 10, 10, 10, 10,-10},
-    {-10,  5,  0,  0,  0,  0,  5,-10},
-    {-20,-10,-10,-10,-10,-10,-10,-20}
+const int Board::KNIGHT_MG[8][8] = {
+    {-167, -89, -34, -49,  61, -97, -15, -107},
+    { -73, -41,  72,  36,  23,  62,   7,  -17},
+    { -47,  60,  37,  65,  84, 129,  73,   44},
+    {  -9,  17,  19,  53,  37,  69,  18,   22},
+    { -13,   4,  16,  13,  28,  19,  21,   -8},
+    { -23,  -9,  12,  10,  19,  17,  25,  -16},
+    { -29, -53, -12,  -3,  -1,  18, -14,  -19},
+    {-105, -21, -58, -33, -17, -28, -19,  -23}
 };
 
-const int Board::KING_TABLE[8][8] = {
-    {-30,-40,-40,-50,-50,-40,-40,-30},
-    {-30,-40,-40,-50,-50,-40,-40,-30},
-    {-30,-40,-40,-50,-50,-40,-40,-30},
-    {-30,-40,-40,-50,-50,-40,-40,-30},
-    {-20,-30,-30,-40,-40,-30,-30,-20},
-    {-10,-20,-20,-20,-20,-20,-20,-10},
-    { 20, 20,  0,  0,  0,  0, 20, 20},
-    { 20, 30, 10,  0,  0, 10, 30, 20}
+const int Board::KNIGHT_EG[8][8] = {
+    {-58, -38, -13, -28, -31, -27, -63, -99},
+    {-25,  -8, -25,  -2,  -9, -25, -24, -52},
+    {-24, -20,  10,   9,  -1,  -9, -19, -41},
+    {-17,   3,  22,  22,  22,  11,   8, -18},
+    {-18,  -6,  16,  25,  16,  17,   4, -18},
+    {-23,  -3,  -1,  15,  10,  -3, -20, -22},
+    {-42, -20, -10,  -5,  -2, -20, -23, -44},
+    {-29, -51, -23, -38, -29, -27, -43, -36}
+};
+
+const int Board::BISHOP_MG[8][8] = {
+    {-29,   4, -82, -37, -25, -42,   7,  -8},
+    {-26,  16, -18, -13,  30,  59,  18, -47},
+    {-16,  37,  43,  40,  35,  50,  37,  -2},
+    { -4,   5,  19,  50,  37,  37,   7,  -2},
+    { -6,  13,  13,  26,  34,  12,  10,   4},
+    {  0,  15,  15,  15,  14,  27,  18,  10},
+    {  4,  15,  16,   0,   7,  21,  33,   1},
+    {-33,  -3, -14, -21, -13, -12, -39, -21}
+};
+
+const int Board::BISHOP_EG[8][8] = {
+    {-14, -21, -11,  -8,  -7,  -9, -17, -24},
+    { -8,  -4,   7, -12,  -3, -13,  -4, -14},
+    {  2,  -8,   0,  -1,  -2,   6,   0,   4},
+    { -3,   9,  12,   9,  14,  10,   3,   2},
+    { -6,   3,  13,  19,   7,  10,  -3,  -9},
+    {-12,  -3,   8,  10,  13,   3,  -7, -15},
+    {-14, -18,  -7,  -1,   4,  -9, -15, -27},
+    {-23,  -9, -23,  -5,  -9, -16,  -5, -17}
+};
+
+const int Board::ROOK_MG[8][8] = {
+    { 32,  42,  32,  51,  63,   9,  31,  43},
+    { 27,  32,  58,  62,  80,  67,  26,  44},
+    { -5,  19,  26,  36,  17,  45,  61,  16},
+    {-24, -11,   7,  26,  24,  35,  -8, -20},
+    {-36, -26, -12,  -1,   9,  -7,   6, -23},
+    {-45, -25, -16, -17,   3,   0,  -5, -33},
+    {-44, -16, -20,  -9,  -1,  11,  -6, -71},
+    {-19, -13,   1,  17,  16,   7, -37, -26}
+};
+
+const int Board::ROOK_EG[8][8] = {
+    { 13,  10,  18,  15,  12,  12,   8,   5},
+    { 11,  13,  13,  11,  -3,   3,   8,   3},
+    {  7,   7,   7,   5,   4,  -3,  -5,  -3},
+    {  4,   3,  13,   1,   2,   1,  -1,   2},
+    {  3,   5,   8,   4,  -5,  -6,  -8, -11},
+    { -4,   0,  -5,  -1,  -7, -12,  -8, -16},
+    { -6,  -6,   0,   2,  -9,  -9, -11,  -3},
+    { -9,   2,   3,  -1,  -5, -13,   4, -20}
+};
+
+const int Board::QUEEN_MG[8][8] = {
+    {-28,   0,  29,  12,  59,  44,  43,  45},
+    {-24, -39,  -5,   1, -16,  57,  28,  54},
+    {-13, -17,   7,   8,  29,  56,  47,  57},
+    {-27, -27, -16, -16,  -1,  17,  -2,   1},
+    { -9, -26,  -9, -10,  -2,  -4,   3,  -3},
+    {-14,   2, -11,  -2,  -5,   2,  14,   5},
+    {-35,  -8,  11,   0,   8,  -7,  -6,  14},
+    {-20, -27, -36, -15, -12, -21, -22, -20}
+};
+
+const int Board::QUEEN_EG[8][8] = {
+    { -9,  22,  22,  27,  27,  19,  10,  20},
+    {-17,  20,  32,  41,  58,  25,  30,   0},
+    {-20,   6,   9,  49,  47,  35,  19,   9},
+    {  3,  22,  24,  45,  57,  40,  57,  36},
+    {-18,  28,  19,  47,  31,  34,  12,  11},
+    { 16,  20,  22,  51,  25,  60,  12,  27},
+    { 25,   8,  12,  43,  43,  22,  16,  23},
+    {-14, -15, -15, -13, -10, -24, -20, -11}
+};
+
+const int Board::KING_MG[8][8] = {
+    {-65,  23,  16, -15, -56, -34,   2,  13},
+    { 29,  -1, -20,  -7,  -8,  -4, -38, -29},
+    { -9,  24,   2, -16, -20,   6,  22, -22},
+    {-17, -20, -12, -27, -30, -25, -14, -36},
+    {-49, -1, -27, -39, -46, -44, -33, -51},
+    {-14, -14, -22, -46, -44, -30, -15, -27},
+    {  1,   7,  -8, -64, -43, -16,   9,   8},
+    {-15,  36,  12, -54,   8, -28,  24,  14}
+};
+
+const int Board::KING_EG[8][8] = {
+    {-74, -35, -18, -18, -11,  15,   4, -17},
+    {-12,  17,  14,  17,  17,  38,  23,  11},
+    { 10,  17,  23,  15,  20,  45,  44,  13},
+    { -8,  22,  24,  27,  26,  33,  26,   3},
+    {-18,  -4,  21,  24,  27,  23,   9, -11},
+    {-19,  -3,  11,  21,  23,  16,   7,  -9},
+    {-27, -11,   4,  13,  14,   4,  -5, -17},
+    {-53, -34, -21, -11, -28, -14, -24, -43}
 };
 
 Board::Board() {
@@ -629,47 +720,95 @@ int Board::evaluateMobility() {
     return (whiteMobility - blackMobility) * 10;
 }
 
-int Board::evaluatePawnStructure() {
-    int score = 0;
+std::pair<int, int> Board::evaluatePawnStructure() {
+    int mgScore = 0;
+    int egScore = 0;
     
+    int whitePawnsOnFile[8] = {0};
+    int blackPawnsOnFile[8] = {0};
+    int maxBlackPawnX[8] = {-1,-1,-1,-1,-1,-1,-1,-1};
+    int minWhitePawnX[8] = {8,8,8,8,8,8,8,8};
+    
+    // First pass: gather pawn data
     for (int y = 0; y < 8; y++) {
-        int whitePawns = 0, blackPawns = 0;
-        
         for (int x = 0; x < 8; x++) {
             if (board[x][y].type == PAWN) {
-                if (board[x][y].color == WHITE) whitePawns++;
-                else blackPawns++;
-            }
-        }
-        
-        if (whitePawns > 1) score -= (whitePawns - 1) * 50;
-        if (blackPawns > 1) score += (blackPawns - 1) * 50;
-        
-        if (whitePawns == 1) {
-            bool isolated = true;
-            if (y > 0) {
-                for (int x = 0; x < 8; x++) {
-                    if (board[x][y-1].type == PAWN && board[x][y-1].color == WHITE) {
-                        isolated = false; break;
-                    }
+                if (board[x][y].color == WHITE) {
+                    whitePawnsOnFile[y]++;
+                    if (x < minWhitePawnX[y]) minWhitePawnX[y] = x;
+                } else {
+                    blackPawnsOnFile[y]++;
+                    if (x > maxBlackPawnX[y]) maxBlackPawnX[y] = x;
                 }
             }
-            if (y < 7 && isolated) {
-                for (int x = 0; x < 8; x++) {
-                    if (board[x][y+1].type == PAWN && board[x][y+1].color == WHITE) {
-                        isolated = false; break;
-                    }
-                }
-            }
-            if (isolated) score -= 20;
         }
     }
     
-    return score;
+    // Second pass: evaluate
+    for (int y = 0; y < 8; y++) {
+        if (whitePawnsOnFile[y] > 1) {
+            mgScore -= (whitePawnsOnFile[y] - 1) * 50;
+            egScore -= (whitePawnsOnFile[y] - 1) * 50;
+        }
+        if (blackPawnsOnFile[y] > 1) {
+            mgScore += (blackPawnsOnFile[y] - 1) * 50;
+            egScore += (blackPawnsOnFile[y] - 1) * 50;
+        }
+        
+        for (int x = 0; x < 8; x++) {
+            if (board[x][y].type != PAWN) continue;
+            
+            if (board[x][y].color == WHITE) {
+                // Isolated pawn (only penalize if not doubled, to match original behavior)
+                if (whitePawnsOnFile[y] == 1) {
+                    bool isolated = true;
+                    if (y > 0 && whitePawnsOnFile[y-1] > 0) isolated = false;
+                    if (y < 7 && whitePawnsOnFile[y+1] > 0) isolated = false;
+                    if (isolated) { mgScore -= 20; egScore -= 20; }
+                }
+                
+                // Passed pawn
+                bool passed = true;
+                if (maxBlackPawnX[y] > x) passed = false;
+                if (y > 0 && maxBlackPawnX[y-1] > x) passed = false;
+                if (y < 7 && maxBlackPawnX[y+1] > x) passed = false;
+                
+                if (passed) {
+                    int bonus = 20 + (x - 1) * 10;
+                    mgScore += bonus;
+                    egScore += bonus * 2;
+                }
+            } else {
+                // Isolated pawn (only penalize if not doubled)
+                if (blackPawnsOnFile[y] == 1) {
+                    bool isolated = true;
+                    if (y > 0 && blackPawnsOnFile[y-1] > 0) isolated = false;
+                    if (y < 7 && blackPawnsOnFile[y+1] > 0) isolated = false;
+                    if (isolated) { mgScore += 20; egScore += 20; }
+                }
+                
+                // Passed pawn
+                bool passed = true;
+                if (minWhitePawnX[y] < x) passed = false;
+                if (y > 0 && minWhitePawnX[y-1] < x) passed = false;
+                if (y < 7 && minWhitePawnX[y+1] < x) passed = false;
+                
+                if (passed) {
+                    int bonus = 20 + (6 - x) * 10;
+                    mgScore -= bonus;
+                    egScore -= bonus * 2;
+                }
+            }
+        }
+    }
+    
+    return std::make_pair(mgScore, egScore);
 }
 
 int Board::evaluate() {
-    int score = 0;
+    int mgScore = 0;
+    int egScore = 0;
+    int gamePhase = 0;
     
     int whiteBishops = 0, blackBishops = 0;
     
@@ -678,26 +817,32 @@ int Board::evaluate() {
             Piece p = board[x][y];
             if (p.type == EMPTY) continue;
             
-            int materialValue = 0;
-            int positionalValue = 0;
+            int mgValue = MG_VALUE[p.type];
+            int egValue = EG_VALUE[p.type];
+            int mgPos = 0, egPos = 0;
+            int rank = (p.color == WHITE) ? 7 - x : x;
             
             switch (p.type) {
                 case PAWN:   
-                    materialValue = 100; 
-                    positionalValue = PAWN_TABLE[p.color == WHITE ? 7-x : x][y];
+                    mgPos = PAWN_MG[rank][y];
+                    egPos = PAWN_EG[rank][y];
                     break;
                 case KNIGHT: 
-                    materialValue = 320; 
-                    positionalValue = KNIGHT_TABLE[p.color == WHITE ? 7-x : x][y];
+                    mgPos = KNIGHT_MG[rank][y];
+                    egPos = KNIGHT_EG[rank][y];
+                    gamePhase += 1;
                     break;
                 case BISHOP: 
-                    materialValue = 330; 
-                    positionalValue = BISHOP_TABLE[p.color == WHITE ? 7-x : x][y];
+                    mgPos = BISHOP_MG[rank][y];
+                    egPos = BISHOP_EG[rank][y];
+                    gamePhase += 1;
                     if (p.color == WHITE) whiteBishops++;
                     else blackBishops++;
                     break;
                 case ROOK:   
-                    materialValue = 500;
+                    mgPos = ROOK_MG[rank][y];
+                    egPos = ROOK_EG[rank][y];
+                    gamePhase += 2;
                     // Rook on open/semi-open file bonus
                     {
                         bool ownPawn = false, oppPawn = false;
@@ -707,78 +852,116 @@ int Board::evaluate() {
                                 else oppPawn = true;
                             }
                         }
-                        if (!ownPawn && !oppPawn) positionalValue += 20; // open file
-                        else if (!ownPawn) positionalValue += 10; // semi-open file
+                        if (!ownPawn && !oppPawn) { mgPos += 20; egPos += 20; }
+                        else if (!ownPawn) { mgPos += 10; egPos += 10; }
                     }
                     break;
                 case QUEEN:  
-                    materialValue = 900; 
+                    mgPos = QUEEN_MG[rank][y];
+                    egPos = QUEEN_EG[rank][y];
+                    gamePhase += 4;
                     break;
                 case KING:   
-                    materialValue = 20000; 
-                    positionalValue = KING_TABLE[p.color == WHITE ? 7-x : x][y];
+                    mgPos = KING_MG[rank][y];
+                    egPos = KING_EG[rank][y];
                     break;
                 case EMPTY: break;
             }
             
-            int totalValue = materialValue + positionalValue;
-            score += (p.color == WHITE) ? totalValue : -totalValue;
-        }
-    }
-    
-    // Bishop pair bonus
-    if (whiteBishops >= 2) score += 30;
-    if (blackBishops >= 2) score -= 30;
-    
-    // Development penalties: pieces still on starting squares block development
-    // White minor pieces on back rank
-    if (board[0][1].type == KNIGHT && board[0][1].color == WHITE) score -= 15;
-    if (board[0][6].type == KNIGHT && board[0][6].color == WHITE) score -= 15;
-    if (board[0][2].type == BISHOP && board[0][2].color == WHITE) score -= 15;
-    if (board[0][5].type == BISHOP && board[0][5].color == WHITE) score -= 15;
-    // Black minor pieces on back rank
-    if (board[7][1].type == KNIGHT && board[7][1].color == BLACK) score += 15;
-    if (board[7][6].type == KNIGHT && board[7][6].color == BLACK) score += 15;
-    if (board[7][2].type == BISHOP && board[7][2].color == BLACK) score += 15;
-    if (board[7][5].type == BISHOP && board[7][5].color == BLACK) score += 15;
-    
-    // Castling bonus: reward having castled (king on g1/c1 or g8/c8 with rook nearby)
-    // Penalty for losing castling rights without castling
-    if (!gameState.whiteCanCastleKingside && !gameState.whiteCanCastleQueenside) {
-        // White can no longer castle - check if king is safely castled
-        if (board[0][6].type == KING && board[0][6].color == WHITE) score += 30; // castled kingside
-        else if (board[0][2].type == KING && board[0][2].color == WHITE) score += 30; // castled queenside
-    }
-    if (!gameState.blackCanCastleKingside && !gameState.blackCanCastleQueenside) {
-        if (board[7][6].type == KING && board[7][6].color == BLACK) score -= 30;
-        else if (board[7][2].type == KING && board[7][2].color == BLACK) score -= 30;
-    }
-    
-    // Passed pawn bonus
-    for (int y = 0; y < 8; y++) {
-        for (int x = 0; x < 8; x++) {
-            if (board[x][y].type != PAWN) continue;
-            bool passed = true;
-            if (board[x][y].color == WHITE) {
-                // Check if any black pawn can block or capture
-                for (int bx = x + 1; bx < 8 && passed; bx++) {
-                    if (y > 0 && board[bx][y-1].type == PAWN && board[bx][y-1].color == BLACK) passed = false;
-                    if (board[bx][y].type == PAWN && board[bx][y].color == BLACK) passed = false;
-                    if (y < 7 && board[bx][y+1].type == PAWN && board[bx][y+1].color == BLACK) passed = false;
-                }
-                if (passed) score += 20 + (x - 1) * 10; // More bonus as pawn advances
+            int mgTotal = mgValue + mgPos;
+            int egTotal = egValue + egPos;
+            
+            if (p.color == WHITE) {
+                mgScore += mgTotal;
+                egScore += egTotal;
             } else {
-                for (int bx = x - 1; bx >= 0 && passed; bx--) {
-                    if (y > 0 && board[bx][y-1].type == PAWN && board[bx][y-1].color == WHITE) passed = false;
-                    if (board[bx][y].type == PAWN && board[bx][y].color == WHITE) passed = false;
-                    if (y < 7 && board[bx][y+1].type == PAWN && board[bx][y+1].color == WHITE) passed = false;
-                }
-                if (passed) score -= 20 + (6 - x) * 10;
+                mgScore -= mgTotal;
+                egScore -= egTotal;
             }
         }
     }
     
-    score += evaluatePawnStructure();
+    // Bishop pair bonus
+    if (whiteBishops >= 2) { mgScore += 30; egScore += 30; }
+    if (blackBishops >= 2) { mgScore -= 30; egScore -= 30; }
+    
+    // Development penalties: pieces still on starting squares block development
+    // White minor pieces on back rank
+    if (board[0][1].type == KNIGHT && board[0][1].color == WHITE) mgScore -= 15;
+    if (board[0][6].type == KNIGHT && board[0][6].color == WHITE) mgScore -= 15;
+    if (board[0][2].type == BISHOP && board[0][2].color == WHITE) mgScore -= 15;
+    if (board[0][5].type == BISHOP && board[0][5].color == WHITE) mgScore -= 15;
+    // Black minor pieces on back rank
+    if (board[7][1].type == KNIGHT && board[7][1].color == BLACK) mgScore += 15;
+    if (board[7][6].type == KNIGHT && board[7][6].color == BLACK) mgScore += 15;
+    if (board[7][2].type == BISHOP && board[7][2].color == BLACK) mgScore += 15;
+    if (board[7][5].type == BISHOP && board[7][5].color == BLACK) mgScore += 15;
+    
+    // Castling bonus: reward having castled (king on g1/c1 or g8/c8)
+    // Penalty for losing castling rights without castling
+    if (!gameState.whiteCanCastleKingside && !gameState.whiteCanCastleQueenside) {
+        // White can no longer castle - check if king is safely castled
+        if (board[0][6].type == KING && board[0][6].color == WHITE) mgScore += 30; // castled kingside
+        else if (board[0][2].type == KING && board[0][2].color == WHITE) mgScore += 30; // castled queenside
+    }
+    if (!gameState.blackCanCastleKingside && !gameState.blackCanCastleQueenside) {
+        if (board[7][6].type == KING && board[7][6].color == BLACK) mgScore -= 30;
+        else if (board[7][2].type == KING && board[7][2].color == BLACK) mgScore -= 30;
+    }
+    
+    // King Safety (Midgame only)
+    std::pair<int, int> whiteKing = findKing(WHITE);
+    std::pair<int, int> blackKing = findKing(BLACK);
+    
+    // White King Safety
+    if (whiteKing.second >= 5) { // Kingside (f, g, h files)
+        int penalty = 0;
+        if (board[1][5].type != PAWN || board[1][5].color != WHITE) penalty += 15; // f2
+        if (board[1][6].type != PAWN || board[1][6].color != WHITE) penalty += 20; // g2
+        if (board[1][7].type != PAWN || board[1][7].color != WHITE) penalty += 15; // h2
+        if (board[2][6].type == PAWN && board[2][6].color == WHITE) penalty -= 10; // g3 is okay
+        mgScore -= penalty;
+    } else if (whiteKing.second <= 2) { // Queenside (a, b, c files)
+        int penalty = 0;
+        if (board[1][0].type != PAWN || board[1][0].color != WHITE) penalty += 10; // a2
+        if (board[1][1].type != PAWN || board[1][1].color != WHITE) penalty += 15; // b2
+        if (board[1][2].type != PAWN || board[1][2].color != WHITE) penalty += 15; // c2
+        mgScore -= penalty;
+    } else {
+        mgScore -= 30; // King in center
+    }
+    
+    // Black King Safety
+    if (blackKing.second >= 5) { // Kingside
+        int penalty = 0;
+        if (board[6][5].type != PAWN || board[6][5].color != BLACK) penalty += 15; // f7
+        if (board[6][6].type != PAWN || board[6][6].color != BLACK) penalty += 20; // g7
+        if (board[6][7].type != PAWN || board[6][7].color != BLACK) penalty += 15; // h7
+        if (board[5][6].type == PAWN && board[5][6].color == BLACK) penalty -= 10; // g6 is okay
+        mgScore += penalty; // positive score is bad for black
+    } else if (blackKing.second <= 2) { // Queenside
+        int penalty = 0;
+        if (board[6][0].type != PAWN || board[6][0].color != BLACK) penalty += 10; // a7
+        if (board[6][1].type != PAWN || board[6][1].color != BLACK) penalty += 15; // b7
+        if (board[6][2].type != PAWN || board[6][2].color != BLACK) penalty += 15; // c7
+        mgScore += penalty;
+    } else {
+        mgScore += 30; // King in center
+    }
+    
+    std::pair<int, int> pawnStructScore = evaluatePawnStructure();
+    mgScore += pawnStructScore.first;
+    egScore += pawnStructScore.second;
+    
+    int mobilityScore = evaluateMobility();
+    mgScore += mobilityScore;
+    egScore += mobilityScore;
+    
+    // Tapered Eval Interpolation
+    // gamePhase max is 24 (4 knights=4, 4 bishops=4, 4 rooks=8, 2 queens=8)
+    if (gamePhase > 24) gamePhase = 24;
+    int phase = gamePhase;
+    int score = (mgScore * phase + egScore * (24 - phase)) / 24;
     
     return score;
 }
