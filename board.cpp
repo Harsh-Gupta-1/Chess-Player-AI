@@ -53,6 +53,12 @@ Board::Board() {
 
 void Board::setupBoard() {
     for (int i = 0; i < 8; ++i) {
+        for (int j = 0; j < 8; ++j) {
+            board[i][j] = Piece();
+        }
+    }
+
+    for (int i = 0; i < 8; ++i) {
         board[1][i] = Piece(PAWN, WHITE);
         board[6][i] = Piece(PAWN, BLACK);
     }
@@ -66,6 +72,15 @@ void Board::setupBoard() {
     board[7][3] = Piece(QUEEN, BLACK);
     board[0][4] = Piece(KING, WHITE);
     board[7][4] = Piece(KING, BLACK);
+    
+    gameState.whiteCanCastleKingside = true;
+    gameState.whiteCanCastleQueenside = true;
+    gameState.blackCanCastleKingside = true;
+    gameState.blackCanCastleQueenside = true;
+    gameState.hasEnPassant = false;
+    gameState.enPassantX = -1;
+    gameState.enPassantY = -1;
+    
     gameState.zobristKey = Zobrist::computeHash(*this, WHITE);
 }
 
@@ -162,7 +177,7 @@ void Board::printBoard() {
                     case ROOK:   symbol = 'R'; break;
                     case QUEEN:  symbol = 'Q'; break;
                     case KING:   symbol = 'K'; break;
-                    default:     break;
+                    case EMPTY:  break;
                 }
                 if (p.color == BLACK) symbol = tolower(symbol);
             }

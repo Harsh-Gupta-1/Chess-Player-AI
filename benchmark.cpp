@@ -41,7 +41,7 @@ void benchmark() {
         Color turn = board.loadFEN(pos.fen);
         
         auto start = std::chrono::high_resolution_clock::now();
-        Move best = ai.getBestMove(board, turn, depth);
+        (void)ai.getBestMove(board, turn, depth);
         auto end = std::chrono::high_resolution_clock::now();
         
         double duration = std::chrono::duration<double>(end - start).count();
