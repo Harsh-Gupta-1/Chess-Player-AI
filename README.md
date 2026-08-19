@@ -1,4 +1,4 @@
-# Chess-Player-AI (~1915 Elo)
+# Chess-Player-AI
 
 A simple command-line chess AI implemented in C++ using the minimax algorithm with alpha-beta pruning. The program allows users to play against the AI or run performance benchmarks to evaluate the AI's search efficiency.
 
@@ -96,16 +96,16 @@ The benchmark tests specific standardized positions (e.g., Kiwipete) and reports
 
 ## Engine Strength & Benchmarks
 
-HarshChess has been formally tested using a **Sequential Probability Ratio Test (SPRT)** gauntlet against established reference engines at a 5+0.1 time control. By heavily profiling the code, we replaced naive legal move filtering with inline pseudo-legal evaluation, resulting in a staggering **1.3 Million Nodes Per Second (NPS)**.
+HarshChess has been formally tested using a **Sequential Probability Ratio Test (SPRT)** against established reference engines. The engine was benchmarked at a 15+0.1 time control. By heavily profiling the code, we replaced naive legal move filtering with inline pseudo-legal evaluation, resulting in a benchmark speed of **~1.4 Million Nodes Per Second (NPS)**.
 
-**Final Estimated Elo: ~1915+**
+**SPRT Match Results (Tested for +50 Elo advantage):**
 
-| Opponent | Reference Elo | Result | Win Rate | Elo Difference (SPRT) | Conclusion |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **TSCP 1.81** | ~1700 | **Win** | 93.3% | +458.5 (LOS 100%) | Engine effortlessly out-calculates the 1700 baseline. |
-| **Vice 1.1** | ~2100 | **Loss** | 12.5% | -338.0 (LOS 0.1%) | Formal architectural ceiling hit. Proves 2D arrays limit search width compared to Bitboards. |
+| Opponent | Reference Elo | Result | Score | SPRT Outcome |
+| :--- | :--- | :--- | :--- | :--- |
+| **TSCP 1.81** | ~1700 | **Win** (13W - 0L - 2D) | 93.3% | H1 Accepted (Likelihood of Superiority > 95%) |
+| **Vice 1.1** | ~2100 | **Loss** (0W - 9L - 3D) | 12.5% | H0 Accepted (Failed to prove +50 Elo advantage) |
 
-*Note: Vice 1.1 uses Magic Bitboards, allowing it to search exponentially faster. Defeating TSCP (+458 Elo) while mathematically isolating the 2D array memory representation as the single limiting factor against a 2100+ Bitboard engine establishes HarshChess as a flagship algorithmic optimization project.*
+*Note: The engine definitively establishes itself above the 1700 baseline but falls short of the 2100 ceiling established by engines utilizing Magic Bitboards.*
 
 ## File Structure
 
