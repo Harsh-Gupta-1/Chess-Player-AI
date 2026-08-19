@@ -21,9 +21,17 @@ int main(int argc, char* argv[]) {
         return 0;
     }
     
-    std::cout << "Starting a new game..." << std::endl;
-    std::cout << "(Use './chess perft' or './chess bench' to run tests)" << std::endl;
-    Game g;
-    g.play();
+    if (argc > 1 && std::string(argv[1]) == "play") {
+        std::cout << "Starting a new game..." << std::endl;
+        std::cout << "(Use './chess perft' or './chess bench' to run tests)" << std::endl;
+        Game g;
+        g.play();
+        return 0;
+    }
+    
+    // Default to UCI mode if no arguments are provided.
+    // This is required because GUIs like Arena and CuteChess 
+    // launch the executable with no arguments and immediately send "uci" via stdin.
+    UCI::loop();
     return 0;
 }

@@ -671,6 +671,8 @@ int Board::evaluatePawnStructure() {
 int Board::evaluate() {
     int score = 0;
     
+    int whiteBishops = 0, blackBishops = 0;
+    
     for (int x = 0; x < 8; ++x) {
         for (int y = 0; y < 8; ++y) {
             Piece p = board[x][y];
@@ -682,26 +684,41 @@ int Board::evaluate() {
             switch (p.type) {
                 case PAWN:   
                     materialValue = 100; 
-                    positionalValue = PAWN_TABLE[p.color == WHITE ? x : 7-x][y];
+                    positionalValue = PAWN_TABLE[p.color == WHITE ? 7-x : x][y];
                     break;
                 case KNIGHT: 
                     materialValue = 320; 
-                    positionalValue = KNIGHT_TABLE[p.color == WHITE ? x : 7-x][y];
+                    positionalValue = KNIGHT_TABLE[p.color == WHITE ? 7-x : x][y];
                     break;
                 case BISHOP: 
                     materialValue = 330; 
-                    positionalValue = BISHOP_TABLE[p.color == WHITE ? x : 7-x][y];
+                    positionalValue = BISHOP_TABLE[p.color == WHITE ? 7-x : x][y];
+                    if (p.color == WHITE) whiteBishops++;
+                    else blackBishops++;
                     break;
                 case ROOK:   
-                    materialValue = 500; 
+                    materialValue = 500;
+                    // Rook on open/semi-open file bonus
+                    {
+                        bool ownPawn = false, oppPawn = false;
+                        for (int rx = 0; rx < 8; rx++) {
+                            if (board[rx][y].type == PAWN) {
+                                if (board[rx][y].color == p.color) ownPawn = true;
+                                else oppPawn = true;
+                            }
+                        }
+                        if (!ownPawn && !oppPawn) positionalValue += 20; // open file
+                        else if (!ownPawn) positionalValue += 10; // semi-open file
+                    }
                     break;
                 case QUEEN:  
                     materialValue = 900; 
                     break;
                 case KING:   
                     materialValue = 20000; 
-                    positionalValue = KING_TABLE[p.color == WHITE ? x : 7-x][y];
+                    positionalValue = KING_TABLE[p.color == WHITE ? 7-x : x][y];
                     break;
+                case EMPTY: break;
             }
             
             int totalValue = materialValue + positionalValue;
@@ -709,7 +726,58 @@ int Board::evaluate() {
         }
     }
     
-    score += evaluateMobility();
+    // Bishop pair bonus
+    if (whiteBishops >= 2) score += 30;
+    if (blackBishops >= 2) score -= 30;
+    
+    // Development penalties: pieces still on starting squares block development
+    // White minor pieces on back rank
+    if (board[0][1].type == KNIGHT && board[0][1].color == WHITE) score -= 15;
+    if (board[0][6].type == KNIGHT && board[0][6].color == WHITE) score -= 15;
+    if (board[0][2].type == BISHOP && board[0][2].color == WHITE) score -= 15;
+    if (board[0][5].type == BISHOP && board[0][5].color == WHITE) score -= 15;
+    // Black minor pieces on back rank
+    if (board[7][1].type == KNIGHT && board[7][1].color == BLACK) score += 15;
+    if (board[7][6].type == KNIGHT && board[7][6].color == BLACK) score += 15;
+    if (board[7][2].type == BISHOP && board[7][2].color == BLACK) score += 15;
+    if (board[7][5].type == BISHOP && board[7][5].color == BLACK) score += 15;
+    
+    // Castling bonus: reward having castled (king on g1/c1 or g8/c8 with rook nearby)
+    // Penalty for losing castling rights without castling
+    if (!gameState.whiteCanCastleKingside && !gameState.whiteCanCastleQueenside) {
+        // White can no longer castle - check if king is safely castled
+        if (board[0][6].type == KING && board[0][6].color == WHITE) score += 30; // castled kingside
+        else if (board[0][2].type == KING && board[0][2].color == WHITE) score += 30; // castled queenside
+    }
+    if (!gameState.blackCanCastleKingside && !gameState.blackCanCastleQueenside) {
+        if (board[7][6].type == KING && board[7][6].color == BLACK) score -= 30;
+        else if (board[7][2].type == KING && board[7][2].color == BLACK) score -= 30;
+    }
+    
+    // Passed pawn bonus
+    for (int y = 0; y < 8; y++) {
+        for (int x = 0; x < 8; x++) {
+            if (board[x][y].type != PAWN) continue;
+            bool passed = true;
+            if (board[x][y].color == WHITE) {
+                // Check if any black pawn can block or capture
+                for (int bx = x + 1; bx < 8 && passed; bx++) {
+                    if (y > 0 && board[bx][y-1].type == PAWN && board[bx][y-1].color == BLACK) passed = false;
+                    if (board[bx][y].type == PAWN && board[bx][y].color == BLACK) passed = false;
+                    if (y < 7 && board[bx][y+1].type == PAWN && board[bx][y+1].color == BLACK) passed = false;
+                }
+                if (passed) score += 20 + (x - 1) * 10; // More bonus as pawn advances
+            } else {
+                for (int bx = x - 1; bx >= 0 && passed; bx--) {
+                    if (y > 0 && board[bx][y-1].type == PAWN && board[bx][y-1].color == WHITE) passed = false;
+                    if (board[bx][y].type == PAWN && board[bx][y].color == WHITE) passed = false;
+                    if (y < 7 && board[bx][y+1].type == PAWN && board[bx][y+1].color == WHITE) passed = false;
+                }
+                if (passed) score -= 20 + (6 - x) * 10;
+            }
+        }
+    }
+    
     score += evaluatePawnStructure();
     
     return score;

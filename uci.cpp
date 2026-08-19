@@ -87,15 +87,26 @@ void UCI::loop() {
             while (iss >> arg) {
                 if (arg == "depth") iss >> depth;
                 else if (arg == "movetime") { iss >> movetime; useTime = true; }
-                else if (arg == "wtime" || arg == "btime") {
-                    long long timeRemaining;
-                    iss >> timeRemaining;
-                    movetime = timeRemaining / 30; // 1/30th of remaining time
-                    useTime = true;
+                else if (arg == "wtime") {
+                    long long t; iss >> t;
+                    if (turn == WHITE) { movetime = t / 40; useTime = true; } // slightly more conservative
+                }
+                else if (arg == "btime") {
+                    long long t; iss >> t;
+                    if (turn == BLACK) { movetime = t / 40; useTime = true; }
+                }
+                else if (arg == "winc") {
+                    long long inc; iss >> inc;
+                    if (turn == WHITE && useTime) { movetime += (inc * 3) / 4; }
+                }
+                else if (arg == "binc") {
+                    long long inc; iss >> inc;
+                    if (turn == BLACK && useTime) { movetime += (inc * 3) / 4; }
                 }
             }
             
             if (useTime) {
+                if (movetime < 50) movetime = 50; // Minimum safety buffer
                 ai.timeLimitMs = movetime;
                 depth = 100; // Search until time out
             } else {

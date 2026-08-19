@@ -33,7 +33,6 @@ int ChessAI::scoreMove(const Move& move, const Move& ttMove, const Board& board,
 }
 
 Move ChessAI::getBestMove(Board& board, Color aiColor, int maxDepth) {
-    tt.clear();
     nodesExplored = 0;
     timeOut = false;
     startTime = std::chrono::steady_clock::now();
@@ -64,13 +63,17 @@ Move ChessAI::getBestMove(Board& board, Color aiColor, int maxDepth) {
             return a.first > b.first;
         });
 
+        if (depth == 1 && !scoredMoves.empty()) {
+            currentBestMove = scoredMoves[0].second;
+        }
+
         for (const auto& pair : scoredMoves) {
             const Move& move = pair.second;
             GameState prevState = board.gameState;
             Piece captured = board.getPiece(move.toX, move.toY);
             board.makeMove(move);
             
-            int score = -negamax(board, depth - 1, 1, -beta, -alpha, aiColor == WHITE ? BLACK : WHITE);
+            int score = -negamax(board, depth - 1, 1, -beta, -alpha, aiColor == WHITE ? BLACK : WHITE, true);
             
             board.undoMove(move, captured, prevState);
 
@@ -85,12 +88,23 @@ Move ChessAI::getBestMove(Board& board, Color aiColor, int maxDepth) {
         
         if (timeOut && depth > 1) break; // Keep best move from previous depth if timed out
         bestMove = currentBestMove;
+        
+        // UCI info output
+        auto elapsed = std::chrono::steady_clock::now() - startTime;
+        long long ms = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
+        if (ms == 0) ms = 1;
+        std::cerr << "info depth " << depth 
+                  << " score cp " << bestScore
+                  << " nodes " << nodesExplored
+                  << " time " << ms
+                  << " nps " << (nodesExplored * 1000 / ms)
+                  << std::endl;
     }
     
     return bestMove;
 }
 
-int ChessAI::negamax(Board& board, int depth, int ply, int alpha, int beta, Color currentTurn) {
+int ChessAI::negamax(Board& board, int depth, int ply, int alpha, int beta, Color currentTurn, bool allowNull) {
     if ((nodesExplored & 2047) == 0) {
         auto now = std::chrono::steady_clock::now();
         if (std::chrono::duration_cast<std::chrono::milliseconds>(now - startTime).count() >= timeLimitMs) {
@@ -115,16 +129,43 @@ int ChessAI::negamax(Board& board, int depth, int ply, int alpha, int beta, Colo
         return quiescence(board, alpha, beta, currentTurn);
     }
     
-    if (board.isCheckmate(currentTurn)) {
-        return -10000 + ply; // Prefer faster checkmates
+    bool inCheck = board.isInCheck(currentTurn);
+    
+    // Null Move Pruning: if we can pass our turn and still get a beta cutoff,
+    // the position is so good we can prune it.
+    if (allowNull && depth >= 3 && !inCheck) {
+        // Make null move: just flip side to move via Zobrist
+        GameState prevState = board.gameState;
+        board.gameState.zobristKey ^= Zobrist::sideKey;
+        if (board.gameState.hasEnPassant) {
+            board.gameState.zobristKey ^= Zobrist::enPassantKeys[board.gameState.enPassantY];
+            board.gameState.hasEnPassant = false;
+        }
+        
+        int R = (depth > 6) ? 3 : 2; // Adaptive reduction
+        int nullScore = -negamax(board, depth - 1 - R, ply + 1, -beta, -beta + 1, 
+                                  currentTurn == WHITE ? BLACK : WHITE, false);
+        
+        board.gameState = prevState; // Undo null move
+        
+        if (timeOut) return 0;
+        if (nullScore >= beta) {
+            return beta;
+        }
     }
     
-    if (board.isStalemate(currentTurn) || board.isDraw()) {
+    std::vector<Move> moves = board.generateLegalMoves(currentTurn);
+    
+    if (moves.empty()) {
+        if (inCheck) {
+            return -10000 + ply; // Checkmate
+        }
+        return 0; // Stalemate
+    }
+    
+    if (board.isDraw()) {
         return 0;
     }
-
-    std::vector<Move> moves = board.generateLegalMoves(currentTurn);
-    if (moves.empty()) return -10000 + ply;
     
     std::vector<std::pair<int, Move>> scoredMoves;
     scoredMoves.reserve(moves.size());
@@ -137,9 +178,7 @@ int ChessAI::negamax(Board& board, int depth, int ply, int alpha, int beta, Colo
     
     int maxEval = std::numeric_limits<int>::min() + 1;
     Move bestMoveForTT(0,0,0,0);
-    bool firstMove = true;
-    
-    bool inCheck = board.isInCheck(currentTurn);
+    int moveCount = 0;
     
     for (const auto& pair : scoredMoves) {
         const Move& move = pair.second;
@@ -151,13 +190,26 @@ int ChessAI::negamax(Board& board, int depth, int ply, int alpha, int beta, Colo
         int nextDepth = depth - 1 + extension;
         int eval;
         
-        if (firstMove) {
-            eval = -negamax(board, nextDepth, ply + 1, -beta, -alpha, currentTurn == WHITE ? BLACK : WHITE);
-            firstMove = false;
+        moveCount++;
+        
+        // Late Move Reductions: moves ordered late are unlikely to be best,
+        // so search them at reduced depth first
+        bool isCapture = (captured.type != EMPTY);
+        bool givesCheck = board.isInCheck(currentTurn == WHITE ? BLACK : WHITE);
+        int reduction = 0;
+        if (moveCount > 3 && depth >= 3 && !inCheck && !isCapture && !givesCheck && move.promotion == EMPTY) {
+            reduction = 1;
+            if (moveCount > 6) reduction = 2;
+        }
+        
+        if (moveCount == 1) {
+            eval = -negamax(board, nextDepth, ply + 1, -beta, -alpha, currentTurn == WHITE ? BLACK : WHITE, true);
         } else {
-            eval = -negamax(board, nextDepth, ply + 1, -alpha - 1, -alpha, currentTurn == WHITE ? BLACK : WHITE);
-            if (eval > alpha && eval < beta) {
-                eval = -negamax(board, nextDepth, ply + 1, -beta, -alpha, currentTurn == WHITE ? BLACK : WHITE);
+            // Try reduced depth first (LMR)
+            eval = -negamax(board, nextDepth - reduction, ply + 1, -alpha - 1, -alpha, currentTurn == WHITE ? BLACK : WHITE, true);
+            // Re-search at full depth if it looks promising
+            if (eval > alpha && (reduction > 0 || eval < beta)) {
+                eval = -negamax(board, nextDepth, ply + 1, -beta, -alpha, currentTurn == WHITE ? BLACK : WHITE, true);
             }
         }
         

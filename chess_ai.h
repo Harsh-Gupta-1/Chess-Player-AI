@@ -22,7 +22,7 @@ public:
     Move killerMoves[100][2];
     int historyMoves[2][64][64];
     
-    ChessAI() : tt(1000003) {
+    ChessAI() : tt(4000003) { // 4 Million entries (~128MB RAM)
         Zobrist::init();
         for(int i=0; i<100; i++) {
             killerMoves[i][0] = Move(0,0,0,0);
@@ -34,7 +34,7 @@ public:
     Move getBestMove(Board& board, Color aiColor, int maxDepth);
 
 private:
-    int negamax(Board& board, int depth, int ply, int alpha, int beta, Color currentTurn);
+    int negamax(Board& board, int depth, int ply, int alpha, int beta, Color currentTurn, bool allowNull);
     int quiescence(Board& board, int alpha, int beta, Color currentTurn);
     int scoreMove(const Move& move, const Move& ttMove, const Board& board, int ply, Color currentTurn);
 };

@@ -70,17 +70,24 @@ A simple command-line chess AI implemented in C++ using the minimax algorithm wi
 
 You can run the engine in different modes using command-line arguments:
 
-1. **UCI Mode** (for plugging into Arena/CuteChess GUIs):
+1. **UCI Mode (Default)** (for plugging into Arena/CuteChess GUIs):
    ```bash
+   ./chess
+   # or
    ./chess uci
    ```
 
-2. **PERFT Suite** (tests move generation correctness):
+2. **Play Interactive Console Game**:
+   ```bash
+   ./chess play
+   ```
+
+3. **PERFT Suite** (tests move generation correctness):
    ```bash
    ./chess perft
    ```
 
-3. **Benchmark Suite** (tests search speed and efficiency):
+4. **Benchmark Suite** (tests search speed and efficiency):
    ```bash
    ./chess bench
    ```

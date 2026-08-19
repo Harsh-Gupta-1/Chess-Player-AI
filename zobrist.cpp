@@ -7,6 +7,7 @@ namespace Zobrist {
     unsigned long long enPassantKeys[8];
     unsigned long long castleKeys[16];
     unsigned long long sideKey;
+    static bool initialized = false;
 
     unsigned long long random64() {
         static std::mt19937_64 rng(1337); // Fixed seed for reproducible hashes
@@ -15,6 +16,8 @@ namespace Zobrist {
     }
 
     void init() {
+        if (initialized) return;
+        initialized = true;
         for (int c = 0; c < 2; c++) {
             for (int p = 0; p < 7; p++) {
                 for (int s = 0; s < 64; s++) {
@@ -32,6 +35,7 @@ namespace Zobrist {
     }
 
     unsigned long long computeHash(const Board& board, Color turn) {
+        init(); // Ensure keys are initialized
         unsigned long long h = 0;
         
         for (int x = 0; x < 8; x++) {

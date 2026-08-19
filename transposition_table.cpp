@@ -1,8 +1,10 @@
 #include "transposition_table.h"
+#include <cstring>
 
 TranspositionTable::TranspositionTable(int numEntries) {
     size = numEntries;
     table = new TTEntry[size];
+    std::memset(table, 0, sizeof(TTEntry) * size);
 }
 
 TranspositionTable::~TranspositionTable() {
@@ -10,9 +12,7 @@ TranspositionTable::~TranspositionTable() {
 }
 
 void TranspositionTable::clear() {
-    for (int i = 0; i < size; i++) {
-        table[i].valid = false;
-    }
+    std::memset(table, 0, sizeof(TTEntry) * size);
 }
 
 void TranspositionTable::store(unsigned long long key, int depth, int score, Bound bound, Move bestMove) {

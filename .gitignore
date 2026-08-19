@@ -1,3 +1,8 @@
 *.exe
+*.log
+*.pgn
+tscp*
+vice*
+cutechess*
 chess.cpp
 .vscode/
