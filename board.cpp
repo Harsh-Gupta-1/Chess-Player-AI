@@ -67,6 +67,84 @@ void Board::setupBoard() {
     board[7][4] = Piece(KING, BLACK);
 }
 
+Color Board::loadFEN(const std::string& fen) {
+    for (int i = 0; i < 8; ++i) {
+        for (int j = 0; j < 8; ++j) {
+            board[i][j] = Piece();
+        }
+    }
+    
+    int rank = 7, file = 0;
+    size_t i = 0;
+    
+    for (; i < fen.length() && fen[i] != ' '; ++i) {
+        char c = fen[i];
+        if (c == '/') {
+            rank--;
+            file = 0;
+        } else if (isdigit(c)) {
+            file += c - '0';
+        } else {
+            Color color = isupper(c) ? WHITE : BLACK;
+            PieceType type = EMPTY;
+            switch (tolower(c)) {
+                case 'p': type = PAWN; break;
+                case 'n': type = KNIGHT; break;
+                case 'b': type = BISHOP; break;
+                case 'r': type = ROOK; break;
+                case 'q': type = QUEEN; break;
+                case 'k': type = KING; break;
+            }
+            if (isInBounds(rank, file)) {
+                board[rank][file] = Piece(type, color);
+            }
+            file++;
+        }
+    }
+    
+    i++;
+    Color activeColor = WHITE;
+    if (i < fen.length() && fen[i] == 'b') activeColor = BLACK;
+    if (i < fen.length()) {
+        while (i < fen.length() && fen[i] != ' ') i++;
+    }
+    i++;
+    
+    gameState.whiteCanCastleKingside = false;
+    gameState.whiteCanCastleQueenside = false;
+    gameState.blackCanCastleKingside = false;
+    gameState.blackCanCastleQueenside = false;
+    
+    if (i < fen.length() && fen[i] != '-') {
+        while (i < fen.length() && fen[i] != ' ') {
+            switch (fen[i]) {
+                case 'K': gameState.whiteCanCastleKingside = true; break;
+                case 'Q': gameState.whiteCanCastleQueenside = true; break;
+                case 'k': gameState.blackCanCastleKingside = true; break;
+                case 'q': gameState.blackCanCastleQueenside = true; break;
+            }
+            i++;
+        }
+    } else {
+        if (i < fen.length()) i++;
+    }
+    i++;
+    
+    gameState.hasEnPassant = false;
+    gameState.enPassantX = -1;
+    gameState.enPassantY = -1;
+    
+    if (i < fen.length() && fen[i] != '-') {
+        char fileChar = fen[i++];
+        char rankChar = fen[i++];
+        gameState.enPassantY = fileChar - 'a';
+        gameState.enPassantX = rankChar - '1';
+        gameState.hasEnPassant = true;
+    }
+    
+    return activeColor;
+}
+
 void Board::printBoard() {
     for (int i = 7; i >= 0; --i) {
         std::cout << i + 1 << " ";
@@ -255,7 +333,7 @@ void Board::updateGameState(const Move& m, const Piece& movingPiece) {
 
 std::vector<Move> Board::generateMoves(Color color) {
     std::vector<Move> moves;
-    
+
     for (int x = 0; x < BOARD_SIZE; ++x) {
         for (int y = 0; y < BOARD_SIZE; ++y) {
             Piece p = board[x][y];

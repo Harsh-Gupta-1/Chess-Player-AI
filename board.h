@@ -20,6 +20,7 @@ public:
 
     Board();
     void setupBoard();
+    Color loadFEN(const std::string& fen);
     void printBoard();
     bool isInBounds(int x, int y) const;
     Piece getPiece(int x, int y) const;
